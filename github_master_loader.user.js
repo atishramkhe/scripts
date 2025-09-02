@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name        GitHub Master Script Loader
+// @name        GitHub Master Script Loader (URL-Aware)
 // @namespace   atishramkhe
-// @version     1.1
-// @description Loads and executes other Violentmonkey scripts from your GitHub repository.
+// @version     1.2
+// @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives.
 // @author      Ateaish
 // @match       *://*/*
 // @grant       GM.xmlHttpRequest
@@ -31,7 +31,7 @@
     function isUrlMatch(url, pattern) {
         // Escape special regex characters, then convert * to .*
         let regexString = pattern
-            .replace(/[.+?^${}()|[\\]/g, '\\$&") // Escape special regex characters
+            .replace(/[.+?^${}()|[\\]/g, '\$&') // Corrected: Escape special regex characters
             .replace(/\*/g, '.*'); // Convert * to .*
 
         // Handle protocol wildcard *://
