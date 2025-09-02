@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader
 // @namespace   atishramkhe
-// @version     1.0
+// @version     1.1
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository.
 // @author      Ateaish
 // @match       *://*/*
