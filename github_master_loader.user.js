@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware)
 // @namespace   atishramkhe
-// @version     1.3
+// @version     1.4
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives.
 // @author      Ateaish
 // @match       *://*/*
@@ -21,6 +21,7 @@
     const scriptUrls = [
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/anime_sama_netflix_player.user.js',
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby_voice_enhancer.user.js',
+        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/youtube_audio_only.user.js',
         // Add more script URLs here as needed
     ];
     /**
