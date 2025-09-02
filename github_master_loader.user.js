@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware)
 // @namespace   atishramkhe
-// @version     1.2
+// @version     1.3
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives.
 // @author      Ateaish
 // @match       *://*/*
 // @grant       GM.xmlHttpRequest
+// @grant       GM_addStyle
+// @grant       GM_setValue
+// @grant       GM_getValue
 // @run-at      document-start
 // @updateURL   https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/github_master_loader.user.js
 // @downloadURL https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/github_master_loader.user.js
