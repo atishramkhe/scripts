@@ -7,8 +7,8 @@
 // @match       *://*/*
 // @grant       GM.xmlHttpRequest
 // @run-at      document-start
-// @updateURL   
-// @downloadURL 
+// @updateURL   https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/github_master_loader.user.js
+// @downloadURL https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/github_master_loader.user.js
 // ==/UserScript==
 
 (function() {
