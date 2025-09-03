@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cineby.app Voice Enhancer
 // @namespace    http://tampermonkey.net/
-// @version      0.7
+// @version      0.9
 // @description  Enhances voice frequencies on Cineby.app using a BiquadFilterNode.
 // @author       Ateaish
 // @match        https://www.cineby.app/*
@@ -89,11 +89,12 @@
         button.style.flexDirection = 'column';
         button.style.alignItems = 'center';
         button.style.justifyContent = 'center';
-        button.style.border = '1px solid white';
+        button.style.border = '2px solid white';
         button.style.borderRadius = '5px';
         button.style.padding = '2px 4px';
         button.style.fontFamily = 'sans-serif';
-        button.style.fontSize = '8px';
+        button.style.fontSize = '10px';
+        button.style.fontWeight = 'bold';
         button.style.lineHeight = '1';
         button.style.color = 'white';
         button.style.marginLeft = '10px';
