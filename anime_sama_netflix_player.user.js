@@ -56,7 +56,12 @@
         console.log(`${LOG_PREFIX} [Parent] Running on Parent Page.`);
         if (settings.scriptEnabled) {
             console.log(`${LOG_PREFIX} [Parent] Attempting to create settings menu.`);
-            createSettingsMenu();
+            // Delay creation until DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', createSettingsMenu);
+            } else {
+                createSettingsMenu();
+            }
         }
 
         window.addEventListener('message', (event) => {
