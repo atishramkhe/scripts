@@ -1,15 +1,13 @@
 // ==UserScript==
 // @name         Cineby.app Voice Enhancer
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.4
 // @description  Enhances voice frequencies on Cineby.app using a BiquadFilterNode.
-// @author       Gemini
+// @author       Ateaish
 // @match        https://www.cineby.app/*
 // @match        https://filmcave.net/*
 // @allFrames    true
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby_voice_enhancer.user.js
-// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby_voice_enhancer.user.js
 // ==/UserScript==
 
 (function() {
@@ -58,24 +56,42 @@
     }
 
     function createToggleButton() {
+        const controlsParent = document.querySelector('.flex.h-12.flex-shrink-0');
+        if (!controlsParent || document.getElementById('voice-boost-button')) {
+            return;
+        }
+
         const button = document.createElement('button');
-        button.textContent = 'Better Voice';
-        button.style.position = 'fixed';
-        button.style.top = '10px';
-        button.style.right = '10px';
-        button.style.zIndex = '99999';
-        button.style.padding = '10px';
-        button.style.backgroundColor = '#333'; // Darker when off
-        button.style.color = 'white';
-        button.style.border = 'none';
+        button.id = 'voice-boost-button';
+        button.classList.add('cineby-scale');
+        button.dataset.tooltip = 'Voice Boost';
+        button.style.display = 'flex';
+        button.style.flexDirection = 'column';
+        button.style.alignItems = 'center';
+        button.style.justifyContent = 'center';
+        button.style.border = '1px solid white';
         button.style.borderRadius = '5px';
-        button.style.cursor = 'pointer';
+        button.style.padding = '2px 4px';
+        button.style.fontFamily = 'sans-serif';
+        button.style.fontSize = '8px';
+        button.style.lineHeight = '1';
+        button.style.color = 'white';
+
+        const voiceSpan = document.createElement('span');
+        voiceSpan.textContent = 'VOICE';
+        const boostSpan = document.createElement('span');
+        boostSpan.textContent = 'BOOST';
+
+        button.appendChild(voiceSpan);
+        button.appendChild(boostSpan);
 
         const updateButtonState = () => {
             if (isEnhancementActive) {
-                button.style.backgroundColor = '#888'; // Lighter when on
+                button.style.borderColor = '#4CAF50'; // Green when on
+                button.style.color = '#4CAF50';
             } else {
-                button.style.backgroundColor = '#333'; // Darker when off
+                button.style.borderColor = 'white'; // Default color when off
+                button.style.color = 'white';
             }
         };
 
@@ -92,48 +108,36 @@
                 console.warn('Video element not found.');
             }
         });
-        document.body.appendChild(button);
 
-        // Initial state update
+        const buttonWrapper = document.createElement('div');
+        buttonWrapper.appendChild(button);
+        controlsParent.insertBefore(buttonWrapper, controlsParent.firstChild);
         updateButtonState();
     }
 
     function init() {
-        let videoFound = false;
-
-        const findAndSetupVideo = () => {
-            const videoElement = document.querySelector('video');
-            if (videoElement && !videoFound) {
-                createToggleButton();
-                setupAudioGraph(videoElement);
-                videoFound = true;
-                console.log('Video element found and audio graph set up.');
-                return true; // Indicate video found
-            }
-            return false; // Indicate video not found yet
-        };
-
-        // Try to find video immediately
-        if (findAndSetupVideo()) {
-            return; // If found, no need for observers/intervals
-        }
-
-        console.log('Video element not found yet. Waiting...');
-
-        // Use a MutationObserver to wait for the video element to be added
         const observer = new MutationObserver((mutationsList, observer) => {
-            if (findAndSetupVideo()) {
-                observer.disconnect(); // Stop observing once video is found
+            for (const mutation of mutationsList) {
+                if (mutation.type === 'childList') {
+                    createToggleButton();
+                }
             }
         });
-        observer.observe(document.body, { childList: true, subtree: true });
 
-        // Fallback: Use setInterval to periodically check for the video element
-        const intervalId = setInterval(() => {
-            if (findAndSetupVideo()) {
-                clearInterval(intervalId); // Stop interval once video is found
-            }
-        }, 500); // Check every 500ms
+        const targetNode = document.getElementById('cineby-player-wrapper');
+        if (targetNode) {
+            observer.observe(targetNode, { childList: true, subtree: true });
+        } else {
+            // Fallback if the wrapper is not immediately available
+            const bodyObserver = new MutationObserver((mutationsList, bodyObserver) => {
+                const targetNode = document.getElementById('cineby-player-wrapper');
+                if (targetNode) {
+                    bodyObserver.disconnect();
+                    observer.observe(targetNode, { childList: true, subtree: true });
+                }
+            });
+            bodyObserver.observe(document.body, { childList: true, subtree: true });
+        }
     }
 
     // Run initialization when the DOM is fully loaded
