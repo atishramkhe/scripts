@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware with Caching)
 // @namespace   atishramkhe
-// @version     1.5
+// @version     1.6
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives, with caching.
 // @author      Ateaish
 // @match       *://*/*
@@ -116,7 +116,7 @@
     scriptUrls.forEach(url => {
         const cacheKey = `master_script_cache_${url}`;// Unique key for each script
 
-        GM_getValue(cacheKey, null).then(cachedData => {
+        GM.getValue(cacheKey, null).then(cachedData => {
             const now = Date.now();
             let scriptContent = null;
             let isCacheFresh = false;
@@ -160,7 +160,7 @@
                                 content: fetchedContent,
                                 timestamp: now
                             });
-                            GM_setValue(cacheKey, dataToCache).then(() => {
+                            GM.setValue(cacheKey, dataToCache).then(() => {
                                 console.log(`[Master Script] Successfully fetched and cached: ${url}`);
                                 if (shouldExecuteScript(currentUrl, fetchedContent)) {
                                     try {
@@ -208,7 +208,7 @@
                             content: fetchedContent,
                             timestamp: now
                         });
-                        GM_setValue(cacheKey, dataToCache).then(() => {
+                        GM.setValue(cacheKey, dataToCache).then(() => {
                             console.log(`[Master Script] Successfully fetched and cached: ${url}`);
                             if (shouldExecuteScript(currentUrl, fetchedContent)) {
                                 try {
