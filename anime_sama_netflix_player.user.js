@@ -1,18 +1,15 @@
 // ==UserScript==
 // @name         Ateaish Player (Simple AutoNext)
 // @namespace    http://tampermonkey.net/
-// @version      6.2
+// @version      6.1
 // @description  A lightweight script to automatically play the next episode on Anime-Sama.
-// @author       Ateaish 
+// @author       Ateaish
 // @match        *://anime-sama.fr/*
 // @match        *://video.sibnet.ru/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/anime_sama_netflix_player.user.js
-// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/anime_sama_netflix_player.user.js
 // ==/UserScript==
-
 
 (function() {
     'use strict';
