@@ -53,8 +53,9 @@
 
     // --- START: Parent Page Logic (anime-sama.fr) ---
     function runParentPageLogic() {
-        console.log(`${LOG_PREFIX} Running on Parent Page.`);
+        console.log(`${LOG_PREFIX} [Parent] Running on Parent Page.`);
         if (settings.scriptEnabled) {
+            console.log(`${LOG_PREFIX} [Parent] Attempting to create settings menu.`);
             createSettingsMenu();
         }
 
@@ -168,7 +169,11 @@
     // --- START: Settings UI Functions ---
 
     function createSettingsMenu() {
-        if (document.getElementById('ateiash-settings-button')) return;
+        console.log(`${LOG_PREFIX} [Settings] createSettingsMenu called.`);
+        if (document.getElementById('ateiash-settings-button')) {
+            console.log(`${LOG_PREFIX} [Settings] Settings button already exists. Returning.`);
+            return;
+        }
         injectSettingsStyles();
 
         const settingsButton = document.createElement('div');
