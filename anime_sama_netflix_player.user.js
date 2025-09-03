@@ -152,7 +152,11 @@
         }
 
         // Start the process
-        setupVideoListener();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupVideoListener);
+        } else {
+            setupVideoListener();
+        }
     }
 
     function createNetflixPlayer(video) {
