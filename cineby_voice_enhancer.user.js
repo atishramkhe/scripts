@@ -1,11 +1,10 @@
 // ==UserScript==
 // @name         Cineby.app Voice Enhancer
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.7
 // @description  Enhances voice frequencies on Cineby.app using a BiquadFilterNode.
 // @author       Ateaish
 // @match        https://www.cineby.app/*
-// @match        https://filmcave.net/*
 // @allFrames    true
 // @grant        none
 // ==/UserScript==
@@ -15,7 +14,10 @@
 
     let audioContext;
     let sourceNode;
-    let biquadFilter;
+    let highPassFilter;
+    let peakingFilter1;
+    let peakingFilter2;
+    let compressor;
     let isEnhancementActive = false;
 
     function setupAudioGraph(videoElement) {
@@ -27,23 +29,40 @@
             sourceNode = audioContext.createMediaElementSource(videoElement);
         }
 
-        if (!biquadFilter) {
-            biquadFilter = audioContext.createBiquadFilter();
-            biquadFilter.type = "peaking"; // Boosts a specific frequency range
-            biquadFilter.frequency.value = 2000; // Center frequency for voice enhancement (Hz)
-            biquadFilter.Q.value = 1; // Quality factor, controls bandwidth
-            biquadFilter.gain.value = 10; // Gain in dB
-        }
+        // Create and configure the audio nodes
+        highPassFilter = audioContext.createBiquadFilter();
+        highPassFilter.type = 'highpass';
+        highPassFilter.frequency.value = 100; // Cut off frequencies below 100Hz
 
-        // Disconnect previous connections if any
+        peakingFilter1 = audioContext.createBiquadFilter();
+        peakingFilter1.type = 'peaking';
+        peakingFilter1.frequency.value = 1500; // Boost fundamental voice frequencies
+        peakingFilter1.Q.value = 1.5;
+        peakingFilter1.gain.value = 6;
+
+        peakingFilter2 = audioContext.createBiquadFilter();
+        peakingFilter2.type = 'peaking';
+        peakingFilter2.frequency.value = 3000; // Boost voice harmonics and clarity
+        peakingFilter2.Q.value = 1.5;
+        peakingFilter2.gain.value = 4;
+
+        compressor = audioContext.createDynamicsCompressor();
+        compressor.threshold.value = -20; // Start compressing when the signal exceeds -20dB
+        compressor.knee.value = 20; // Softer transition into compression
+        compressor.ratio.value = 4; // 4:1 compression ratio
+        compressor.attack.value = 0.05; // 50ms attack time
+        compressor.release.value = 0.25; // 250ms release time
+
+        // Connect the nodes in a chain
         sourceNode.disconnect();
-        biquadFilter.disconnect();
+        sourceNode.connect(highPassFilter);
+        highPassFilter.connect(peakingFilter1);
+        peakingFilter1.connect(peakingFilter2);
+        peakingFilter2.connect(compressor);
+        compressor.connect(audioContext.destination);
 
-        // Connect the nodes
-        sourceNode.connect(biquadFilter);
-        biquadFilter.connect(audioContext.destination);
         isEnhancementActive = true;
-        console.log('Voice enhancement active.');
+        console.log('Advanced voice enhancement active.');
     }
 
     function disableAudioGraph() {
@@ -56,10 +75,11 @@
     }
 
     function createToggleButton() {
-        const controlsParent = document.querySelector('.flex.h-12.flex-shrink-0');
-        if (!controlsParent || document.getElementById('voice-boost-button')) {
+        const volumeButton = document.getElementById('ButtonVolume');
+        if (!volumeButton || document.getElementById('voice-boost-button')) {
             return;
         }
+        const volumeButtonContainer = volumeButton.parentElement;
 
         const button = document.createElement('button');
         button.id = 'voice-boost-button';
@@ -76,6 +96,7 @@
         button.style.fontSize = '8px';
         button.style.lineHeight = '1';
         button.style.color = 'white';
+        button.style.marginLeft = '10px';
 
         const voiceSpan = document.createElement('span');
         voiceSpan.textContent = 'VOICE';
@@ -109,9 +130,7 @@
             }
         });
 
-        const buttonWrapper = document.createElement('div');
-        buttonWrapper.appendChild(button);
-        controlsParent.insertBefore(buttonWrapper, controlsParent.firstChild);
+        volumeButtonContainer.insertAdjacentElement('afterend', button);
         updateButtonState();
     }
 
@@ -138,6 +157,11 @@
             });
             bodyObserver.observe(document.body, { childList: true, subtree: true });
         }
+
+        // Fallback interval to ensure the button is created
+        setInterval(() => {
+            createToggleButton();
+        }, 1000);
     }
 
     // Run initialization when the DOM is fully loaded
