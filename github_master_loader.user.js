@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware with Caching)
 // @namespace   atishramkhe
-// @version     1.8
+// @version     1.7
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives, with caching.
 // @author      Ateaish
 // @match       *://*/*
@@ -24,8 +24,7 @@
         // Add more script URLs here as needed
     ];
 
-    // Cache duration in milliseconds (e.g., 24 hours)
-    const CACHE_DURATION = 24 * 60 * 60 * 1000; 
+     
 
     /**
      * Checks if a given URL matches a Violentmonkey-style pattern.
@@ -114,55 +113,14 @@
     const currentUrl = window.location.href;
 
     scriptUrls.forEach(url => {
-        const cacheKey = `master_script_cache_${url}`;// Unique key for each script
-
-        const now = Date.now();
-        let scriptContent = null;
-        let isCacheFresh = false;
-
-        const cachedData = GM_getValue(cacheKey, null);
-
-        if (cachedData) {
-            try {
-                const parsedData = JSON.parse(cachedData);
-                if (parsedData.content && (now - parsedData.timestamp < CACHE_DURATION)) {
-                    scriptContent = parsedData.content;
-                    isCacheFresh = true;
-                    console.log(`[Master Script] Using cached version for: ${url}`);
-                } else {
-                    console.log(`[Master Script] Cache for ${url} is stale or invalid. Fetching new version.`);
-                }
-            } catch (e) {
-                console.error(`[Master Script] Error parsing cached data for ${url}:`, e);
-                // Fall through to fetch new version if cache is corrupted
-            }
-        }
-
-        if (scriptContent && isCacheFresh) {
-            if (shouldExecuteScript(currentUrl, scriptContent)) {
-                try {
-                    eval(scriptContent);
-                    console.log(`[Master Script] Executed cached script: ${url}`);
-                } catch (e) {
-                    console.error(`[Master Script] Error executing cached script from ${url}:`, e);
-                }
-            } else {
-                console.log(`[Master Script] Skipping cached script ${url} as it does not match the current URL: ${currentUrl}`);
-            }
-        } else {
-            // Fetch from GitHub if no fresh cache
+            // Fetch from GitHub always
             GM.xmlHttpRequest({
                 method: "GET",
                 url: url,
                 onload: function(response) {
                     if (response.status === 200) {
                         const fetchedContent = response.responseText;
-                        const dataToCache = JSON.stringify({
-                            content: fetchedContent,
-                            timestamp: now
-                        });
-                        GM_setValue(cacheKey, dataToCache); // Synchronous call
-                        console.log(`[Master Script] Successfully fetched and cached: ${url}`);
+                        console.log(`[Master Script] Successfully fetched: ${url}`);
                         if (shouldExecuteScript(currentUrl, fetchedContent)) {
                             try {
                                 eval(fetchedContent);
@@ -181,6 +139,5 @@
                     console.error(`[Master Script] Network error fetching script from ${url}:`, error);
                 }
             });
-        }
-    });
+        });
 })();
