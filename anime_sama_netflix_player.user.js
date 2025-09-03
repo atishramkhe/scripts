@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ateaish Player (Simple AutoNext)
 // @namespace    http://tampermonkey.net/
-// @version      6.1
+// @version      6.8
 // @description  A lightweight script to automatically play the next episode on Anime-Sama.
 // @author       Ateaish
 // @match        *://anime-sama.fr/*
@@ -58,9 +58,13 @@
             console.log(`${LOG_PREFIX} [Parent] Attempting to create settings menu.`);
             // Delay creation until DOM is ready
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', createSettingsMenu);
+                document.addEventListener('DOMContentLoaded', () => {
+                    createSettingsMenu();
+                    autoSelectSibnetLecteur(); // Call auto-selection after DOM is ready
+                });
             } else {
                 createSettingsMenu();
+                autoSelectSibnetLecteur(); // Call auto-selection if DOM is already ready
             }
         }
 
@@ -86,6 +90,106 @@
             } else {
                 console.error(`${LOG_PREFIX} [Parent] Next episode button not found.`);
             }
+        }
+
+        function autoSelectSibnetLecteur() {
+            console.log(`${LOG_PREFIX} [Parent] Attempting to auto-select Sibnet Lecteur.`);
+            const selectElement = document.getElementById('selectLecteurs');
+            if (!selectElement) {
+                console.log(`${LOG_PREFIX} [Parent] 'selectLecteurs' element not found.`);
+                return;
+            }
+
+            const options = Array.from(selectElement.options);
+            let sibnetFound = false;
+            let observer = null;
+            let currentOptionIndex = 0; // To keep track of which option is being tested
+
+            // Function to check if an iframe is Sibnet
+            function isSibnetIframe(iframe) {
+                const iframeSrc = iframe ? iframe.getAttribute('src') : null;
+                return iframeSrc && iframeSrc.includes('sibnet.ru');
+            }
+
+            // Find the container of the video player (parent of playerDF)
+            const playerDF = document.getElementById('playerDF');
+            const playerContainer = playerDF ? playerDF.parentNode : null;
+
+            if (!playerContainer) {
+                console.log(`${LOG_PREFIX} [Parent] Could not find player container (parent of #playerDF). Auto-selection aborted.`);
+                return;
+            }
+
+            console.log(`${LOG_PREFIX} [Parent] Observing player container:`, playerContainer);
+
+            // Create a MutationObserver
+            observer = new MutationObserver((mutationsList, observer) => {
+                for (const mutation of mutationsList) {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        for (const node of mutation.addedNodes) {
+                            if (node.tagName === 'IFRAME') {
+                                console.log(`${LOG_PREFIX} [Parent] MutationObserver: New iframe added. Checking...`, node);
+                                if (isSibnetIframe(node)) {
+                                    console.log(`${LOG_PREFIX} [Parent] Sibnet Lecteur found via observer: ${options[currentOptionIndex].text}`);
+                                    sibnetFound = true;
+                                    selectElement.selectedIndex = currentOptionIndex; // Select the found option
+                                    selectElement.dispatchEvent(new Event('change')); // Trigger change to ensure UI updates
+                                    observer.disconnect(); // Stop observing
+                                    return; // Exit early
+                                }
+                            }
+                        }
+                    } else if (mutation.type === 'attributes' && mutation.attributeName === 'src') {
+                        if (mutation.target.tagName === 'IFRAME') {
+                            console.log(`${LOG_PREFIX} [Parent] MutationObserver: Iframe src attribute changed. Checking...`, mutation.target.getAttribute('src'));
+                            if (isSibnetIframe(mutation.target)) {
+                                console.log(`${LOG_PREFIX} [Parent] Sibnet Lecteur found via observer: ${options[currentOptionIndex].text}`);
+                                sibnetFound = true;
+                                selectElement.selectedIndex = currentOptionIndex; // Select the found option
+                                selectElement.dispatchEvent(new Event('change')); // Trigger change to ensure UI updates
+                                observer.disconnect(); // Stop observing
+                                return; // Exit early
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Start observing the player container
+            observer.observe(playerContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+
+            // Iterate through options and trigger change events
+            // We need a way to pause between options until the observer finds something or a timeout occurs.
+            // A simple loop with a delay won't work well with MutationObserver.
+            // We need to chain the selection attempts.
+
+            function tryNextLecteur(index) {
+                if (sibnetFound || index >= options.length) {
+                    // If Sibnet found or all options tried
+                    if (!sibnetFound) {
+                        console.log(`${LOG_PREFIX} [Parent] Sibnet not found after checking all Lecteurs. Defaulting to first Lecteur.`);
+                        selectElement.selectedIndex = 0;
+                        selectElement.dispatchEvent(new Event('change'));
+                    }
+                    if (observer) observer.disconnect(); // Disconnect if still observing
+                    return;
+                }
+
+                currentOptionIndex = index;
+                selectElement.selectedIndex = index;
+                selectElement.dispatchEvent(new Event('change')); // Trigger change event
+
+                // Set a timeout for this option. If Sibnet is not found within this time, try the next.
+                setTimeout(() => {
+                    if (!sibnetFound) { // Only proceed if Sibnet hasn't been found by the observer yet
+                        console.log(`${LOG_PREFIX} [Parent] No Sibnet found for Lecteur ${options[index].text} within timeout. Trying next.`);
+                        tryNextLecteur(index + 1); // Try the next option
+                    }
+                }, 500); // Reduced delay to 0.5 seconds
+            }
+
+            // Start trying from the first option
+            tryNextLecteur(0);
         }
     }
     // --- END: Parent Page Logic ---
