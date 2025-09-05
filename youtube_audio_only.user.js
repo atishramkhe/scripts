@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Audio Only
 // @namespace    http://tampermonkey.net/
-// @version      4.6
+// @version      4.7
 // @description  Audio-only mode with UI alignment (bandwidth savings coming soon)
 // @author       YourName
 // @match        *.youtube.com/*
