@@ -4,7 +4,7 @@
 // @version      4.6
 // @description  Audio-only mode with UI alignment (bandwidth savings coming soon)
 // @author       YourName
-// @match        https://www.youtube.com/*
+// @match        *.youtube.com/*
 // @icon         https://www.youtube.com/favicon.ico
 // @grant        unsafeWindow
 // @grant        GM_addStyle
