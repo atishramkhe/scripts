@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Cineby.app Voice Enhancer
+// @name         Cineby.app Voice Enhancer (Merged)
 // @namespace    http://tampermonkey.net/
-// @version      0.9
-// @description  Enhances voice frequencies on Cineby.app using a BiquadFilterNode.
+// @version      1.3
+// @description  Enhances voice frequencies on Cineby.app with a merged script.
 // @author       Ateaish
 // @match        https://www.cineby.app/*
 // @allFrames    true
@@ -13,162 +13,156 @@
     'use strict';
 
     let audioContext;
-    let sourceNode;
     let highPassFilter;
     let peakingFilter1;
     let peakingFilter2;
     let compressor;
     let isEnhancementActive = false;
+    const sourceNodeMap = new WeakMap();
+    let currentVideoElement;
+    let boostButton;
 
     function setupAudioGraph(videoElement) {
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
 
+        let sourceNode = sourceNodeMap.get(videoElement);
         if (!sourceNode) {
-            sourceNode = audioContext.createMediaElementSource(videoElement);
+            try {
+                sourceNode = audioContext.createMediaElementSource(videoElement);
+                sourceNodeMap.set(videoElement, sourceNode);
+            } catch (e) {
+                console.error('[Cineby Voice Enhancer] Error creating source node:', e);
+                return;
+            }
         }
 
-        // Create and configure the audio nodes
-        highPassFilter = audioContext.createBiquadFilter();
-        highPassFilter.type = 'highpass';
-        highPassFilter.frequency.value = 100; // Cut off frequencies below 100Hz
+        if (!highPassFilter) {
+            highPassFilter = audioContext.createBiquadFilter();
+            highPassFilter.type = 'highpass';
+            highPassFilter.frequency.value = 100;
 
-        peakingFilter1 = audioContext.createBiquadFilter();
-        peakingFilter1.type = 'peaking';
-        peakingFilter1.frequency.value = 1500; // Boost fundamental voice frequencies
-        peakingFilter1.Q.value = 1.5;
-        peakingFilter1.gain.value = 6;
+            peakingFilter1 = audioContext.createBiquadFilter();
+            peakingFilter1.type = 'peaking';
+            peakingFilter1.frequency.value = 1500;
+            peakingFilter1.Q.value = 1.5;
+            peakingFilter1.gain.value = 6;
 
-        peakingFilter2 = audioContext.createBiquadFilter();
-        peakingFilter2.type = 'peaking';
-        peakingFilter2.frequency.value = 3000; // Boost voice harmonics and clarity
-        peakingFilter2.Q.value = 1.5;
-        peakingFilter2.gain.value = 4;
+            peakingFilter2 = audioContext.createBiquadFilter();
+            peakingFilter2.type = 'peaking';
+            peakingFilter2.frequency.value = 3000;
+            peakingFilter2.Q.value = 1.5;
+            peakingFilter2.gain.value = 4;
 
-        compressor = audioContext.createDynamicsCompressor();
-        compressor.threshold.value = -20; // Start compressing when the signal exceeds -20dB
-        compressor.knee.value = 20; // Softer transition into compression
-        compressor.ratio.value = 4; // 4:1 compression ratio
-        compressor.attack.value = 0.05; // 50ms attack time
-        compressor.release.value = 0.25; // 250ms release time
+            compressor = audioContext.createDynamicsCompressor();
+            compressor.threshold.value = -20;
+            compressor.knee.value = 20;
+            compressor.ratio.value = 4;
+            compressor.attack.value = 0.05;
+            compressor.release.value = 0.25;
+        }
 
-        // Connect the nodes in a chain
         sourceNode.disconnect();
         sourceNode.connect(highPassFilter);
         highPassFilter.connect(peakingFilter1);
         peakingFilter1.connect(peakingFilter2);
         peakingFilter2.connect(compressor);
         compressor.connect(audioContext.destination);
-
         isEnhancementActive = true;
-        console.log('Advanced voice enhancement active.');
+        updateButtonState();
     }
 
-    function disableAudioGraph() {
+    function disableAudioGraph(videoElement) {
+        const sourceNode = sourceNodeMap.get(videoElement);
         if (sourceNode && audioContext) {
             sourceNode.disconnect();
-            sourceNode.connect(audioContext.destination); // Connect video directly to destination
+            sourceNode.connect(audioContext.destination);
             isEnhancementActive = false;
-            console.log('Voice enhancement disabled.');
+            updateButtonState();
+        }
+    }
+
+    function updateButtonState() {
+        if (boostButton) {
+            if (isEnhancementActive) {
+                boostButton.style.borderColor = '#4CAF50'; // Green when on
+                boostButton.style.color = '#4CAF50';
+            } else {
+                boostButton.style.borderColor = 'white'; // Default color when off
+                boostButton.style.color = 'white';
+            }
         }
     }
 
     function createToggleButton() {
-        const volumeButton = document.getElementById('ButtonVolume');
-        if (!volumeButton || document.getElementById('voice-boost-button')) {
+        const playButton = document.getElementById('ButtonPlay');
+        if (!playButton || document.getElementById('voice-boost-button')) {
             return;
         }
-        const volumeButtonContainer = volumeButton.parentElement;
 
-        const button = document.createElement('button');
-        button.id = 'voice-boost-button';
-        button.classList.add('cineby-scale');
-        button.dataset.tooltip = 'Voice Boost';
-        button.style.display = 'flex';
-        button.style.flexDirection = 'column';
-        button.style.alignItems = 'center';
-        button.style.justifyContent = 'center';
-        button.style.border = '2px solid white';
-        button.style.borderRadius = '5px';
-        button.style.padding = '2px 4px';
-        button.style.fontFamily = 'sans-serif';
-        button.style.fontSize = '10px';
-        button.style.fontWeight = 'bold';
-        button.style.lineHeight = '1';
-        button.style.color = 'white';
-        button.style.marginLeft = '10px';
+        const controlsContainer = playButton.parentElement;
+        if (!controlsContainer) {
+            return;
+        }
+
+        boostButton = document.createElement('button');
+        boostButton.id = 'voice-boost-button';
+        boostButton.classList.add('cineby-scale');
+        boostButton.dataset.tooltip = 'Voice Boost';
+        boostButton.style.display = 'flex';
+        boostButton.style.flexDirection = 'column';
+        boostButton.style.alignItems = 'center';
+        boostButton.style.justifyContent = 'center';
+        boostButton.style.border = '2px solid white';
+        boostButton.style.borderRadius = '5px';
+        boostButton.style.padding = '2px 4px';
+        boostButton.style.fontFamily = 'sans-serif';
+        boostButton.style.fontSize = '10px';
+        boostButton.style.fontWeight = 'bold';
+        boostButton.style.lineHeight = '1';
+        boostButton.style.color = 'white';
+        boostButton.style.marginLeft = '10px';
 
         const voiceSpan = document.createElement('span');
         voiceSpan.textContent = 'VOICE';
         const boostSpan = document.createElement('span');
         boostSpan.textContent = 'BOOST';
 
-        button.appendChild(voiceSpan);
-        button.appendChild(boostSpan);
+        boostButton.appendChild(voiceSpan);
+        boostButton.appendChild(boostSpan);
 
-        const updateButtonState = () => {
-            if (isEnhancementActive) {
-                button.style.borderColor = '#4CAF50'; // Green when on
-                button.style.color = '#4CAF50';
-            } else {
-                button.style.borderColor = 'white'; // Default color when off
-                button.style.color = 'white';
-            }
-        };
-
-        button.addEventListener('click', () => {
+        boostButton.addEventListener('click', () => {
             const videoElement = document.querySelector('video');
             if (videoElement) {
                 if (isEnhancementActive) {
-                    disableAudioGraph();
+                    disableAudioGraph(videoElement);
                 } else {
                     setupAudioGraph(videoElement);
                 }
-                updateButtonState();
-            } else {
-                console.warn('Video element not found.');
             }
         });
 
-        volumeButtonContainer.insertAdjacentElement('afterend', button);
+        controlsContainer.appendChild(boostButton);
         updateButtonState();
     }
 
-    function init() {
-        const observer = new MutationObserver((mutationsList, observer) => {
-            for (const mutation of mutationsList) {
-                if (mutation.type === 'childList') {
-                    createToggleButton();
-                }
-            }
-        });
-
-        const targetNode = document.getElementById('cineby-player-wrapper');
-        if (targetNode) {
-            observer.observe(targetNode, { childList: true, subtree: true });
-        } else {
-            // Fallback if the wrapper is not immediately available
-            const bodyObserver = new MutationObserver((mutationsList, bodyObserver) => {
-                const targetNode = document.getElementById('cineby-player-wrapper');
-                if (targetNode) {
-                    bodyObserver.disconnect();
-                    observer.observe(targetNode, { childList: true, subtree: true });
-                }
-            });
-            bodyObserver.observe(document.body, { childList: true, subtree: true });
-        }
-
-        // Fallback interval to ensure the button is created
+    function main() {
         setInterval(() => {
-            createToggleButton();
-        }, 1000);
+            const playButton = document.getElementById('ButtonPlay');
+            if (playButton && !document.getElementById('voice-boost-button')) {
+                createToggleButton();
+            }
+
+            const videoElement = document.querySelector('video');
+            if (videoElement && videoElement.src && videoElement !== currentVideoElement) {
+                currentVideoElement = videoElement;
+                isEnhancementActive = false;
+                updateButtonState();
+            }
+        }, 500);
     }
 
-    // Run initialization when the DOM is fully loaded
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
+    main();
+
 })();
