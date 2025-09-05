@@ -23,6 +23,7 @@
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby_voice_enhancer.user.js',
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/youtube_audio_only.user.js',
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/xprime_voice_enhancer.user.js',
+        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse_voice_enhancer.user.js',
         // Add more script URLs here as needed
     ];
 
