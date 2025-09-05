@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         YouTube Audio Only
 // @namespace    http://tampermonkey.net/
-// @version      4.1
+// @version      4.6
 // @description  Audio-only mode with UI alignment (bandwidth savings coming soon)
 // @author       YourName
-// @match        *.youtube.com/*
+// @match        https://www.youtube.com/*
 // @icon         https://www.youtube.com/favicon.ico
 // @grant        unsafeWindow
 // @grant        GM_addStyle
@@ -16,37 +16,64 @@
 (function() {
     'use strict';
 
-    
-
-    // Add our styles with perfect alignment
-    
-
     // State management
     let audioOnlyMode = false;
     let originalQuality = null;
     let currentVideoId = null;
     let videoObserver = null;
 
-    // Create perfectly aligned toggle button
-    function createToggleButton() {
-        if (document.getElementById('yt-audio-only-mode-button')) return; // Check for our button ID
+    // Inject CSS for button styling and positioning
+    GM_addStyle(`
+        #yt-audio-only-mode-button {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 35;
+            padding: 8px 12px;
+            background-color: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-family: "YouTube Noto", Roboto, Arial, Helvetica, sans-serif;
+            font-size: 14px;
+            border: 1px solid #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: opacity 0.3s ease, background-color 0.3s ease, top 0.3s ease;
+            opacity: 0; /* Hidden by default */
+        }
 
-        const actionsContainer = document.getElementById('actions'); // The div containing like/dislike
-        if (!actionsContainer) return;
+        #movie_player.ytp-fullscreen #yt-audio-only-mode-button {
+            top: 50px;
+        }
+
+        #movie_player:not(.ytp-autohide) #yt-audio-only-mode-button,
+        #movie_player.ytp-menu-visible #yt-audio-only-mode-button {
+            opacity: 1;
+        }
+
+        #yt-audio-only-mode-button:hover {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+    `);
+
+    // Create toggle button inside the player
+    function createToggleButton() {
+        if (document.getElementById('yt-audio-only-mode-button')) return;
+
+        const playerControls = document.querySelector('.ytp-chrome-top');
+        if (!playerControls) return;
 
         const toggle = document.createElement('button');
-        toggle.id = 'yt-audio-only-mode-button'; // New ID for this button
-        toggle.className = 'yt-spec-button-shape-next yt-spec-button-shape-next--tonal yt-spec-button-shape-next--mono yt-spec-button-shape-next--size-m'; // Mimic YouTube's button classes
-        toggle.textContent = 'Audio Only Mode';
+        toggle.id = 'yt-audio-only-mode-button';
+        toggle.textContent = 'Audio Only';
         toggle.title = 'Toggle audio-only mode';
         toggle.addEventListener('click', toggleTrueAudioMode);
 
-        // Insert our button before the actions container
-        actionsContainer.parentNode.insertBefore(toggle, actionsContainer);
+        playerControls.appendChild(toggle);
     }
 
     // Toggle between modes
-    function toggleTrueAudioMode() {
+    function toggleTrueAudioMode(event) {
+        event.stopPropagation(); // Prevent video click-to-pause
         audioOnlyMode = !audioOnlyMode;
 
         if (audioOnlyMode) {
@@ -63,24 +90,18 @@
         const player = unsafeWindow.document.getElementById('movie_player');
         if (!player) return;
 
-        // 1. Save original state
         originalQuality = player.getPlaybackQuality();
         currentVideoId = getCurrentVideoId();
 
-        // 2. Force minimal video quality
         player.setPlaybackQuality('tiny');
         interceptQualityChanges(true);
 
-        // 3. Reduce video processing
         const video = document.querySelector('video.html5-main-video');
         if (video) {
             video.style.opacity = '0';
             video.style.pointerEvents = 'none';
-            video.pause(); // Reduces processing
-            setTimeout(() => video.play(), 50); // Audio continues
         }
 
-        // 4. Monitor for video changes
         startVideoObserver();
     }
 
@@ -96,7 +117,6 @@
         if (video) {
             video.style.opacity = '1';
             video.style.pointerEvents = 'auto';
-            video.play();
         }
 
         stopVideoObserver();
@@ -109,9 +129,7 @@
 
         if (enable) {
             player._originalSetQuality = player.setPlaybackQuality;
-            player.setPlaybackQuality = function() {
-                return this._originalSetQuality('tiny');
-            };
+            player.setPlaybackQuality = () => player._originalSetQuality('tiny');
         } else if (player._originalSetQuality) {
             player.setPlaybackQuality = player._originalSetQuality;
         }
@@ -120,26 +138,19 @@
     // Watch for video element changes
     function startVideoObserver() {
         stopVideoObserver();
-
-        videoObserver = new MutationObserver(mutations => {
+        videoObserver = new MutationObserver(() => {
             const video = document.querySelector('video.html5-main-video');
             if (video && audioOnlyMode) {
                 video.style.opacity = '0';
                 video.style.pointerEvents = 'none';
             }
-
-            // Check for video change
             const newVideoId = getCurrentVideoId();
             if (newVideoId && newVideoId !== currentVideoId) {
                 currentVideoId = newVideoId;
                 setTimeout(enableTrueAudioMode, 300);
             }
         });
-
-        videoObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        videoObserver.observe(document.body, { childList: true, subtree: true });
     }
 
     function stopVideoObserver() {
@@ -152,20 +163,13 @@
     function updateButtonState() {
         const toggle = document.getElementById('yt-audio-only-mode-button');
         if (toggle) {
-            if (audioOnlyMode) {
-                toggle.textContent = 'Video Mode';
-                // Add styling for active state if needed, e.g., toggle.style.color = 'blue';
-            } else {
-                toggle.textContent = 'Audio Only Mode';
-                // Remove active state styling, e.g., toggle.style.color = 'white';
-            }
+            toggle.textContent = audioOnlyMode ? 'Video Mode' : 'Audio Only';
         }
     }
 
     function getCurrentVideoId() {
         try {
-            return unsafeWindow.ytplayer?.config?.args?.video_id ||
-                   new URLSearchParams(window.location.search).get('v');
+            return unsafeWindow.ytplayer?.config?.args?.video_id || new URLSearchParams(window.location.search).get('v');
         } catch (e) {
             return null;
         }
@@ -174,26 +178,16 @@
     // Initialize
     function init() {
         createToggleButton();
-
-        // Re-apply audio mode if active
         if (audioOnlyMode) {
             setTimeout(enableTrueAudioMode, 500);
-        }
-
-        // Start observing the controls for layout-breaking changes
-        const controls = document.querySelector('.ytp-right-controls');
-        if (controls) {
-            alignmentObserver.observe(controls, { childList: true, subtree: true });
         }
     }
 
     // Start when ready
     const readyStateCheck = setInterval(() => {
-        if (document.querySelector('.ytp-right-controls')) {
+        if (document.querySelector('.ytp-chrome-top')) {
             clearInterval(readyStateCheck);
             init();
-
-            // Handle SPA navigation
             document.addEventListener('yt-navigate-finish', init);
         }
     }, 100);
