@@ -5,6 +5,7 @@
 // @description  A lightweight script to automatically play the next episode on Anime-Sama.
 // @author       Ateaish
 // @match        *://anime-sama.fr/*
+// @match        *://anime-sama.org/*
 // @match        *://video.sibnet.ru/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
