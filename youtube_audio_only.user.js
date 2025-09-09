@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         YouTube Audio Only
 // @namespace    http://tampermonkey.net/
-// @version      4.8
+// @version      4.9
 // @description  Audio-only mode with UI alignment 
 // @author       Ateaish
 // @match        https://www.youtube.com/*
+// @match        https://accounts.youtube.com/*
 // @icon         https://www.youtube.com/favicon.ico
 // @grant        unsafeWindow
 // @grant        GM_addStyle
