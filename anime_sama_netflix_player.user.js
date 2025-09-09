@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ateaish Player (Simple AutoNext)
 // @namespace    http://tampermonkey.net/
-// @version      6.8
+// @version      6.9
 // @description  A lightweight script to automatically play the next episode on Anime-Sama.
 // @author       Ateaish
 // @match        *://anime-sama.fr/*
