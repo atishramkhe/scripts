@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ateaish Player (Simple AutoNext)
 // @namespace    http://tampermonkey.net/
-// @version      7.0
+// @version      7.1
 // @description  A lightweight script to automatically play the next episode on Anime-Sama.
 // @author       Ateaish
 // @match        *://anime-sama.fr/*
@@ -41,7 +41,7 @@
     // --- END: Settings Management ---
 
     // --- START: Main Logic Router ---
-    const onAnimeSama = window.location.hostname.includes('anime-sama.fr');
+    const onAnimeSama = window.location.hostname.includes('anime-sama.fr') || window.location.hostname.includes('anime-sama.org');
     const onSibnet = window.location.hostname.includes('video.sibnet.ru');
 
     if (onAnimeSama) {
@@ -54,7 +54,7 @@
     // --- END: Main Logic Router ---
 
 
-    // --- START: Parent Page Logic (anime-sama.fr) ---
+    // --- START: Parent Page Logic (anime-sama) ---
     function runParentPageLogic() {
         console.log(`${LOG_PREFIX} [Parent] Running on Parent Page.`);
         if (settings.scriptEnabled) {
