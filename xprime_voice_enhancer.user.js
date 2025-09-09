@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         Xprime.tv Voice Enhancer
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Enhances voice frequencies on Xprime.tv.
 // @author       Ateaish
 // @match        https://xprime.tv/*
 // @allFrames    true
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/xprime/xprime_voice_enhancer.user.js
+// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/xprime/xprime_voice_enhancer.user.js
 // ==/UserScript==
 
 (function() {

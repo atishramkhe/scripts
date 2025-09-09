@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         Cinepulse.to Voice Enhancer
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Enhances voice frequencies on Cinepulse.to.
 // @author       Ateaish
 // @match        https://cinepulse.to/*
 // @allFrames    true
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse/cinepulse_voice_enhancer.user.js
+// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse/cinepulse_voice_enhancer.user.js
 // ==/UserScript==
 
 (function() {
