@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Cineby.app Voice Enhancer (Merged)
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Enhances voice frequencies on Cineby.app with a merged script.
 // @author       Ateaish
 // @match        https://www.cineby.app/*
+// @match        https://www.bitcine.app/*
 // @allFrames    true
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby/cineby_voice_enhancer.user.js
