@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware with Caching)
 // @namespace   atishramkhe
-// @version     3.0
+// @version     3.1
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives, with caching.
 // @author      Ateaish
 // @match       *://*/*
@@ -38,7 +38,7 @@
      * @returns {boolean} True if the URL matches the pattern, false otherwise.
      */
     function isUrlMatch(url, pattern) {
-        // Escape special regex characters, then convert * to .*
+        // Escape secial regex characters, then convert * to .*
         let regexString = pattern
             .replace(/[.+?^${}()|[\\]/g, '\$&') // Corrected: Escape special regex characters
             .replace(/\*/g, '.*'); // Convert * to .*
@@ -113,6 +113,46 @@
         return (matches && includes && !excludes);
     }
 
+    function patchGMAddStyle(scriptContent) {
+        // Replace GM_addStyle with a function that injects CSS into the page
+        const patch = `
+function GM_addStyle(css) {
+    var style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+}
+`;
+        // Only patch if GM_addStyle is used
+        if (scriptContent.includes('GM_addStyle')) {
+            return patch + scriptContent;
+        }
+        return scriptContent;
+    }
+
+    function executeScript(scriptContent, url) {
+        try {
+            // Patch GM_addStyle for page context
+            scriptContent = patchGMAddStyle(scriptContent);
+
+            // Check if Trusted Types are supported
+            if (window.trustedTypes && window.trustedTypes.createPolicy) {
+                const policy = window.trustedTypes.createPolicy('script-loader', {
+                    createScript: content => content,
+                });
+                const trustedScript = policy.createScript(scriptContent);
+                const scriptEl = document.createElement('script');
+                scriptEl.textContent = trustedScript;
+                document.head.appendChild(scriptEl).remove();
+            } else {
+                // Fallback for browsers that don't support Trusted Types
+                eval(scriptContent);
+            }
+            console.log(`[Master Script] Executed fetched script: ${url}`);
+        } catch (e) {
+            console.error(`[Master Script] Error executing fetched script from ${url}:`, e);
+        }
+    }
+
     const currentUrl = window.location.href;
 
     scriptUrls.forEach(url => {
@@ -125,12 +165,7 @@
                         const fetchedContent = response.responseText;
                         console.log(`[Master Script] Successfully fetched: ${url}`);
                         if (shouldExecuteScript(currentUrl, fetchedContent)) {
-                            try {
-                                eval(fetchedContent);
-                                console.log(`[Master Script] Executed fetched script: ${url}`);
-                            } catch (e) {
-                                console.error(`[Master Script] Error executing fetched script from ${url}:`, e);
-                            }
+                            executeScript(fetchedContent, url);
                         } else {
                             console.log(`[Master Script] Skipping fetched script ${url} as it does not match the current URL: ${currentUrl}`);
                         }
