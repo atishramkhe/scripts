@@ -1,11 +1,10 @@
 // ==UserScript==
-// @name         YouTube Audio Only
+// @name         YouTube Audio Only & Bass Booster
 // @namespace    http://tampermonkey.net/
-// @version      4.9
-// @description  Audio-only mode with UI alignment 
+// @version      5.0
+// @description  Audio-only mode & Bass Booster 
 // @author       Ateaish
 // @match        https://www.youtube.com/*
-// @match        https://accounts.youtube.com/*
 // @icon         https://www.youtube.com/favicon.ico
 // @grant        unsafeWindow
 // @grant        GM_addStyle
@@ -25,34 +24,46 @@
 
     // Inject CSS for button styling and positioning
     GM_addStyle(`
-        #yt-audio-only-mode-button {
+        #yt-audio-only-mode-button, #yt-bass-boost-button {
             position: absolute;
             top: 12px;
-            left: 12px;
             z-index: 35;
             padding: 8px 12px;
-            background-color: rgba(0, 0, 0, 0.3);
-            color: #fff;
+            background-color: rgba(0, 0, 0, 0.08); /* Even more transparent */
+            color: rgba(255,255,255,0.55);
             font-family: "YouTube Noto", Roboto, Arial, Helvetica, sans-serif;
             font-size: 14px;
-            border: 1px solid #fff;
+            border: 1px solid rgba(255,255,255,0.25);
             border-radius: 4px;
             cursor: pointer;
-            transition: opacity 0.3s ease, background-color 0.3s ease, top 0.3s ease;
+            transition: opacity 0.3s ease, background-color 0.3s ease, color 0.3s, border-color 0.3s, left 0.3s ease;
             opacity: 0; /* Hidden by default */
         }
 
-        #movie_player.ytp-fullscreen #yt-audio-only-mode-button {
-            top: 50px;
+        #yt-audio-only-mode-button { left: 12px; }
+        #yt-bass-boost-button { left: 110px; }
+
+        #yt-audio-only-mode-button.active,
+        #yt-bass-boost-button.active {
+            background-color: rgba(29,185,84,0.18) !important; /* Green, very transparent */
+            color: rgba(255,255,255,0.75) !important;
+            border-color: rgba(29,185,84,0.35) !important;
         }
+
+        /* Move buttons further right in fullscreen to avoid playlist number overlay */
+        #movie_player.ytp-fullscreen #yt-audio-only-mode-button { top: 50px; left: 60px; }
+        #movie_player.ytp-fullscreen #yt-bass-boost-button { top: 50px; left: 158px; }
 
         #movie_player:not(.ytp-autohide) #yt-audio-only-mode-button,
-        #movie_player.ytp-menu-visible #yt-audio-only-mode-button {
+        #movie_player.ytp-menu-visible #yt-audio-only-mode-button,
+        #movie_player:not(.ytp-autohide) #yt-bass-boost-button,
+        #movie_player.ytp-menu-visible #yt-bass-boost-button {
             opacity: 1;
         }
-
-        #yt-audio-only-mode-button:hover {
-            background-color: rgba(0, 0, 0, 0.5);
+        #yt-audio-only-mode-button:hover, #yt-bass-boost-button:hover {
+            background-color: rgba(0, 0, 0, 0.18);
+            color: rgba(255,255,255,0.85);
+            border-color: rgba(255,255,255,0.35);
         }
     `);
 
@@ -72,6 +83,24 @@
         playerControls.appendChild(toggle);
     }
 
+    // Add after createToggleButton()
+    function createBassBoostButton() {
+        if (document.getElementById('yt-bass-boost-button')) return;
+
+        const playerControls = document.querySelector('.ytp-chrome-top');
+        if (!playerControls) return;
+
+        const bassBtn = document.createElement('button');
+        bassBtn.id = 'yt-bass-boost-button';
+        bassBtn.textContent = 'Bass Boost';
+        bassBtn.title = 'Toggle bass boost';
+        // No marginTop here
+
+        bassBtn.addEventListener('click', toggleBassBoost);
+
+        playerControls.appendChild(bassBtn);
+    }
+
     // Toggle between modes
     function toggleTrueAudioMode(event) {
         event.stopPropagation(); // Prevent video click-to-pause
@@ -84,6 +113,22 @@
         }
 
         updateButtonState();
+    }
+
+    // Bass boost state and nodes
+    let bassBoostEnabled = false;
+    let audioCtx = null, sourceNode = null, lowshelf = null, peaking = null;
+
+    function toggleBassBoost(event) {
+        event.stopPropagation();
+        bassBoostEnabled = !bassBoostEnabled;
+
+        if (bassBoostEnabled) {
+            enableBassBoost();
+        } else {
+            disableBassBoost();
+        }
+        updateBassButtonState();
     }
 
     // Enable bandwidth-saving mode
@@ -149,6 +194,9 @@
             if (newVideoId && newVideoId !== currentVideoId) {
                 currentVideoId = newVideoId;
                 setTimeout(enableTrueAudioMode, 300);
+                if (bassBoostEnabled) {
+                    setTimeout(enableBassBoost, 500);
+                }
             }
         });
         videoObserver.observe(document.body, { childList: true, subtree: true });
@@ -164,7 +212,24 @@
     function updateButtonState() {
         const toggle = document.getElementById('yt-audio-only-mode-button');
         if (toggle) {
-            toggle.textContent = audioOnlyMode ? 'Video Mode' : 'Audio Only';
+            // Keep text always "Audio Only"
+            if (audioOnlyMode) {
+                toggle.classList.add('active');
+            } else {
+                toggle.classList.remove('active');
+            }
+        }
+    }
+
+    function updateBassButtonState() {
+        const bassBtn = document.getElementById('yt-bass-boost-button');
+        if (bassBtn) {
+            // Keep text always "Bass Boost"
+            if (bassBoostEnabled) {
+                bassBtn.classList.add('active');
+            } else {
+                bassBtn.classList.remove('active');
+            }
         }
     }
 
@@ -179,9 +244,67 @@
     // Initialize
     function init() {
         createToggleButton();
+        createBassBoostButton();
         if (audioOnlyMode) {
             setTimeout(enableTrueAudioMode, 500);
         }
+    }
+
+    // Enable bass boost
+    function enableBassBoost() {
+        const video = document.querySelector('video.html5-main-video');
+        if (!video) return;
+
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Only create sourceNode once per video element
+        if (!sourceNode || sourceNode.mediaElement !== video) {
+            if (sourceNode) {
+                try { sourceNode.disconnect(); } catch (e) {}
+            }
+            sourceNode = audioCtx.createMediaElementSource(video);
+        }
+
+        // Create filters if not already created
+        if (!lowshelf) {
+            lowshelf = audioCtx.createBiquadFilter();
+            lowshelf.type = 'lowshelf';
+            lowshelf.frequency.value = 200;
+            lowshelf.gain.value = 4; // Reduced from 8
+        }
+        if (!peaking) {
+            peaking = audioCtx.createBiquadFilter();
+            peaking.type = 'peaking';
+            peaking.frequency.value = 80;
+            peaking.Q.value = 1;
+            peaking.gain.value = 3; // Reduced from 6
+        }
+
+        // Disconnect all first to avoid multiple connections
+        try { sourceNode.disconnect(); } catch (e) {}
+        try { lowshelf.disconnect(); } catch (e) {}
+        try { peaking.disconnect(); } catch (e) {}
+
+        // Connect: source -> lowshelf -> peaking -> destination
+        sourceNode.connect(lowshelf);
+        lowshelf.connect(peaking);
+        peaking.connect(audioCtx.destination);
+
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function disableBassBoost() {
+        // Disconnect filters, connect source directly to destination
+        if (sourceNode) {
+            try { sourceNode.disconnect(); } catch (e) {}
+            try { lowshelf && lowshelf.disconnect(); } catch (e) {}
+            try { peaking && peaking.disconnect(); } catch (e) {}
+
+            sourceNode.connect(audioCtx.destination);
+        }
+        // Do not recreate sourceNode or audioCtx!
     }
 
     // Start when ready
