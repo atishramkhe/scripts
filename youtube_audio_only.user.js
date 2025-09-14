@@ -133,7 +133,7 @@
 
     // Enable bandwidth-saving mode
     function enableTrueAudioMode() {
-        const player = unsafeWindow.document.getElementById('movie_player');
+        const player = document.getElementById('movie_player');
         if (!player) return;
 
         originalQuality = player.getPlaybackQuality();
@@ -153,7 +153,7 @@
 
     // Disable audio-only mode
     function disableTrueAudioMode() {
-        const player = unsafeWindow.document.getElementById('movie_player');
+        const player = document.getElementById('movie_player');
         if (player && originalQuality) {
             interceptQualityChanges(false);
             player.setPlaybackQuality(originalQuality);
@@ -170,7 +170,7 @@
 
     // Intercept quality changes
     function interceptQualityChanges(enable) {
-        const player = unsafeWindow.document.getElementById('movie_player');
+        const player = document.getElementById('movie_player');
         if (!player) return;
 
         if (enable) {
@@ -235,7 +235,7 @@
 
     function getCurrentVideoId() {
         try {
-            return unsafeWindow.ytplayer?.config?.args?.video_id || new URLSearchParams(window.location.search).get('v');
+            return window.ytplayer?.config?.args?.video_id || new URLSearchParams(window.location.search).get('v');
         } catch (e) {
             return null;
         }
