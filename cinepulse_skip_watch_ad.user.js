@@ -5,6 +5,8 @@
 // @description  Automatically bypasses the "Watch Ad" gate on Cinepulse.to.
 // @author       GitHub Copilot
 // @match        https://cinepulse.cc/*
+// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse_skip_watch_ad.user.js
+// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse_skip_watch_ad.user.js
 // @grant        none
 // ==/UserScript==
 
