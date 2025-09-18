@@ -6,6 +6,8 @@
 // @author       You
 // @match        https://einthusan.tv/movie/watch/*
 // @grant        GM_xmlhttpRequest
+// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby_redirect.user.js
+// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby_redirect.user.js
 // ==/UserScript==
 
 function cinebyDebug(msg) {
