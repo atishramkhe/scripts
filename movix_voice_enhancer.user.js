@@ -7,6 +7,8 @@
 // @match        https://movix.website/*
 // @allFrames    true
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/movix_voice_enhancer.user.js
+// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/movix_voice_enhancer.user.js
 // ==/UserScript==
 
 (function() {
