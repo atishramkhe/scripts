@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware with Caching)
 // @namespace   atishramkhe
-// @version     3.1
+// @version     3.2
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives, with caching.
 // @author      Ateaish
 // @match       *://*/*
@@ -24,6 +24,7 @@
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/youtube_audio_only.user.js',
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/xprime_voice_enhancer.user.js',
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse_voice_enhancer.user.js',
+        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse_skip_watch_ad.user.js'
         // Add more script URLs here as needed
     ];
 
