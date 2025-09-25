@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Movix Voice Enhancer
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Enhances voice frequencies on Movix.
 // @author       Ateaish
 // @match        https://movix.website/*
@@ -86,6 +86,11 @@
     }
 
     function createToggleButton() {
+        const videoElement = document.querySelector('video');
+        if (!videoElement) {
+            removeBoostButton();
+            return;
+        }
         if (document.getElementById('voice-boost-button')) {
             return;
         }
@@ -219,10 +224,12 @@
         setInterval(() => {
             const videoElement = document.querySelector('video');
             if (videoElement) {
-                if (!boostButton) {
+                // Only create if button doesn't exist and video exists
+                if (!document.getElementById('voice-boost-button')) {
                     createToggleButton();
                 }
             } else {
+                // Always remove if no video
                 removeBoostButton();
             }
         }, 500);
