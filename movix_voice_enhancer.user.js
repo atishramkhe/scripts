@@ -5,6 +5,8 @@
 // @description  Enhances voice frequencies on Movix.
 // @author       Ateaish
 // @match        https://movix.website/*
+// @match        https://movix.site/*
+// @match        https://movix.club/*
 // @allFrames    true
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/movix_voice_enhancer.user.js
