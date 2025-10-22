@@ -17,7 +17,7 @@
     'use strict';
 
     // Spoof VIP for Movix.website
-    if (location.hostname.includes('movix.website')) {
+    if (location.hostname.includes('movix.club')) {
         localStorage.setItem("is_vip", "true");
     }
 
