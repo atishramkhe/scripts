@@ -5,6 +5,7 @@
 // @description  Enhances voice frequencies on Cineby.app with a merged script.
 // @author       Ateaish
 // @match        https://www.cineby.app/*
+// @match        https://www.cineby.ru/*
 // @match        https://www.bitcine.app/*
 // @allFrames    true
 // @grant        none
