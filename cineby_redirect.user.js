@@ -122,6 +122,6 @@ function insertCinebyButton(cinebyUrl, movieTitle) {
   cinebyDebug(`Found movie: ${info.title} (${info.year})`);
   const tmdbId = await findTmdbId(info.title, info.year);
   if (!tmdbId) return cinebyDebug('TMDB ID not found');
-  const cinebyUrl = `https://www.cineby.app/movie/${tmdbId}`;
+  const cinebyUrl = `https://www.cineby.ru/movie/${tmdbId}`;
   insertCinebyButton(cinebyUrl, info.title);
 })();
