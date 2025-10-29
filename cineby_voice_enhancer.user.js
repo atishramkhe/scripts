@@ -91,8 +91,8 @@
     function updateButtonState() {
         if (boostButton) {
             if (isEnhancementActive) {
-                boostButton.style.borderColor = '#4CAF50'; // Green when on
-                boostButton.style.color = '#4CAF50';
+                boostButton.style.borderColor = '#e02735'; // Green when on
+                boostButton.style.color = '#e02735';
             } else {
                 boostButton.style.borderColor = 'white'; // Default color when off
                 boostButton.style.color = 'white';
