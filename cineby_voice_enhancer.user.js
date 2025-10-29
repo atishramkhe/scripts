@@ -7,6 +7,7 @@
 // @match        https://www.cineby.app/*
 // @match        https://www.cineby.ru/*
 // @match        https://www.bitcine.app/*
+// @match        https://www.cineby.gd/*
 // @allFrames    true
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby/cineby_voice_enhancer.user.js
