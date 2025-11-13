@@ -5,8 +5,6 @@
 // @description  Automatically bypasses the "Watch Ad" gate on Cinepulse.to and Movix.website.
 // @author       GitHub Copilot
 // @match        https://cinepulse.cc/*
-// @match        https://movix.website/*
-// @match        https://movix.site/*
 // @match        https://movix.club/*
 // @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse_skip_watch_ad.user.js
 // @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cinepulse_skip_watch_ad.user.js
