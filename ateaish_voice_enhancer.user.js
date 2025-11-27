@@ -7,6 +7,8 @@
 // @match        https://player.videasy.net/*
 // @match        https://atishramkhe.github.io/movies/*
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_voice_enhancer.user.js
+// @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_voice_enhancer.user.js
 // ==/UserScript==
 
 (function() {
