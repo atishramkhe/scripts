@@ -27,7 +27,7 @@
         #yt-audio-only-mode-button, #yt-bass-boost-button {
             position: absolute;
             top: 12px;
-            z-index: 35;
+            z-index: 100;
             padding: 8px 12px;
             background-color: rgba(0, 0, 0, 0.08); /* Even more transparent */
             color: rgba(255,255,255,0.55);
