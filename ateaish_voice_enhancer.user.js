@@ -22,7 +22,7 @@
     let peakingFilter1;
     let peakingFilter2;
     let compressor;
-    let isEnhancementActive = false;
+    let isEnhancementActive = localStorage.getItem('voiceBoostEnabled') === 'true';
     const sourceNodeMap = new WeakMap();
     let currentVideoElement;
     let boostButton;
@@ -157,12 +157,14 @@
 
         boostButton.addEventListener('click', () => {
             const videoElement = document.querySelector('video');
-            if (videoElement) {
-                if (isEnhancementActive) {
-                    disableAudioGraph(videoElement);
-                } else {
-                    setupAudioGraph(videoElement);
-                }
+            if (!videoElement) return;
+
+            if (isEnhancementActive) {
+                disableAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'false');
+            } else {
+                setupAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'true');
             }
         });
 
@@ -222,12 +224,14 @@
 
         boostButton.addEventListener('click', () => {
             const videoElement = document.querySelector('video');
-            if (videoElement) {
-                if (isEnhancementActive) {
-                    disableAudioGraph(videoElement);
-                } else {
-                    setupAudioGraph(videoElement);
-                }
+            if (!videoElement) return;
+
+            if (isEnhancementActive) {
+                disableAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'false');
+            } else {
+                setupAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'true');
             }
         });
 
@@ -284,12 +288,14 @@
 
         boostButton.addEventListener('click', () => {
             const videoElement = parentDiv.querySelector('video');
-            if (videoElement) {
-                if (isEnhancementActive) {
-                    disableAudioGraph(videoElement);
-                } else {
-                    setupAudioGraph(videoElement);
-                }
+            if (!videoElement) return;
+
+            if (isEnhancementActive) {
+                disableAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'false');
+            } else {
+                setupAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'true');
             }
         });
 
@@ -346,12 +352,14 @@
 
         boostButton.addEventListener('click', () => {
             const videoElement = parentDiv.querySelector('video');
-            if (videoElement) {
-                if (isEnhancementActive) {
-                    disableAudioGraph(videoElement);
-                } else {
-                    setupAudioGraph(videoElement);
-                }
+            if (!videoElement) return;
+
+            if (isEnhancementActive) {
+                disableAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'false');
+            } else {
+                setupAudioGraph(videoElement);
+                localStorage.setItem('voiceBoostEnabled', 'true');
             }
         });
 
@@ -376,6 +384,7 @@
 
     function main() {
         setInterval(() => {
+
             if (location.hostname === 'www.vidking.net') {
                 if (!document.getElementById('voice-boost-button')) {
                     createToggleButtonVidKing();
@@ -401,13 +410,26 @@
             const videoElement = document.querySelector('video');
             if (videoElement && videoElement.src && videoElement !== currentVideoElement) {
                 currentVideoElement = videoElement;
-                isEnhancementActive = false;
-                updateButtonState();
+
+                const boostEnabled = localStorage.getItem('voiceBoostEnabled') === 'true';
+                if (boostEnabled) {
+                    const btn = document.getElementById('voice-boost-button');
+                    if (btn) {
+                        // Ensure visual state is correct before auto-enabling
+                        isEnhancementActive = false;
+                        updateButtonState();
+                        btn.click();
+                    }
+                } else {
+                    isEnhancementActive = false;
+                    updateButtonState();
+                }
             }
         }, 500);
     }
 
     main();
+
 
 })();
 
