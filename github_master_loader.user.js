@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware with Caching)
 // @namespace   atishramkhe
-// @version     3.8
+// @version     3.9
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives, with caching.
 // @author      Ateaish
 // @match       *://*/*
