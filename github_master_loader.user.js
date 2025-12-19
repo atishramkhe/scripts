@@ -29,7 +29,8 @@
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cineby_redirect.user.js', 
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_voice_enhancer.user.js', 
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_autoplay.user.js', 
-        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/dadlive_unmute.user.js'
+        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/dadlive_unmute.user.js', 
+        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cdn_autoplay.user.js'
         // Add more script URLs here as needed
     ];
 
