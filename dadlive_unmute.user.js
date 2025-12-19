@@ -283,6 +283,22 @@
             }
         }
 
+        // Hide "CDN Live TV" button if present
+        const cdnLiveBtn = document.querySelector('button.css-rte19r.css-h2k9yu.css-181s0gc .css-17dq96f[aria-label="time"]');
+        if (cdnLiveBtn && cdnLiveBtn.textContent.trim() === 'CDN Live TV') {
+            try {
+                const btn = cdnLiveBtn.closest('button');
+                if (btn) {
+                    btn.style.setProperty('display', 'none', 'important');
+                    btn.style.setProperty('visibility', 'hidden', 'important');
+                    changed = true;
+                    console.log('[DaddyHD Auto Unmute] Hiding CDN Live TV button');
+                }
+            } catch (e) {
+                console.error('[DaddyHD Auto Unmute] Failed to hide CDN Live TV button:', e);
+            }
+        }
+
         return changed;
     }
 
