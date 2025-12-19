@@ -1,12 +1,11 @@
 // ==UserScript==
 // @name         DaddyHD Auto Unmute
 // @namespace    http://tampermonkey.net/
-// @version      0.8
+// @version      0.7
 // @description  Wait for video, then unmute player + hide overlay on daddyhd.com / iframe streams
 // @match        https://daddyhd.com/stream/*
 // @match        https://security.giokko.ru/*
 // @match        https://epicplayplay.cfd/premiumtv/*
-// @match        https://cdn-live.tv/*
 // @run-at       document-idle
 // @grant        none
 // @all-frames   true
@@ -16,14 +15,6 @@
     'use strict';
 
     console.log('[DaddyHD Auto Unmute] Loaded in', location.href, 'frame?', window.top === window ? 'top' : 'iframe');
-
-    function isCdnLivePlayer() {
-        try {
-            return location.hostname.includes('cdn-live.tv')
-        } catch (e) {
-            return false;
-        }
-    }
 
     // Heuristic: is this frame where the player UI lives?
     function isPlayerFrame() {
@@ -71,10 +62,6 @@
     let videoReady = false;
     let volumeSynced = false;
     let overlayHidden = false;
-
-    let cdnPlayClicked = false;
-    let cdnWatermarkHidden = false;
-    let cdnUserGestureArmed = false;
 
     function markVideoReadyOnce(v) {
         if (videoReady) return;
@@ -167,155 +154,15 @@
         }
     }
 
-    function isAutomationDone() {
-        const isCdn = isCdnLivePlayer();
-
-        const vids = getVideoElements();
-        const hasVideo = vids.length > 0;
-        const anyPlaying = vids.some(v => {
-            try {
-                return !v.paused && v.currentTime > 0;
-            } catch (e) {
-                return false;
-            }
-        });
-        const overlayBtn = findOverlayUnmuteButton();
-        const hasOverlay = !!overlayBtn;
-        const hasWatermark = document.querySelector('img[alt="watermark"][src*="logo-cdn-live-tv1.png"]');
-
-        if (isCdn && hasVideo && !anyPlaying) return false;
-        if (hasVideo && !volumeSynced) return false;
-        if (hasOverlay && !overlayHidden) return false;
-        if (isCdn && hasWatermark && !cdnWatermarkHidden) return false;
-
-        return true;
-    }
-
-    function armCdnLiveUserGesturePlay() {
-        if (!isCdnLivePlayer()) return;
-        if (cdnUserGestureArmed) return;
-
-        cdnUserGestureArmed = true;
-
-        const handler = () => {
-            document.removeEventListener('click', handler, true);
-            document.removeEventListener('keydown', handler, true);
-            document.removeEventListener('touchstart', handler, true);
-
-            console.log('[DaddyHD Auto Unmute] User gesture detected, forcing CDN-Live play');
-
-            try {
-                const playBtn = document.querySelector('button[aria-label="Play"], button.css-rte19r[aria-label="Play"]');
-                if (playBtn && playBtn.offsetParent !== null) {
-                    simulateRealClick(playBtn);
-                    cdnPlayClicked = true;
-                }
-            } catch (e) {
-                console.error('[DaddyHD Auto Unmute] Failed to click CDN-Live Play button from gesture handler:', e);
-            }
-
-            const vids = getVideoElements();
-            vids.forEach(v => {
-                try {
-                    v.muted = false;
-                    if (v.volume === 0) v.volume = 1.0;
-                    const p = v.play && v.play();
-                    if (p && typeof p.catch === 'function') {
-                        p.catch(err => {
-                            console.warn('[DaddyHD Auto Unmute] video.play() still blocked after user gesture:', err);
-                        });
-                    }
-                } catch (e) {
-                    console.error('[DaddyHD Auto Unmute] Error forcing video.play() after user gesture:', e);
-                }
-            });
-        };
-
-        document.addEventListener('click', handler, true);
-        document.addEventListener('keydown', handler, true);
-        document.addEventListener('touchstart', handler, true);
-    }
-
-    function handleCdnLivePlayer() {
-        if (!isCdnLivePlayer()) return false;
-
-        // Prepare a real user-gesture-based play fallback for autoplay restrictions
-        armCdnLiveUserGesturePlay();
-
-        let changed = false;
-
-        const vids = getVideoElements();
-        const anyPlaying = vids.some(v => {
-            try {
-                return !v.paused && v.currentTime > 0;
-            } catch (e) {
-                return false;
-            }
-        });
-
-        // Try to click the Play button until something is actually playing
-        if (!anyPlaying) {
-            const playBtn = document.querySelector('button[aria-label="Play"], button.css-rte19r[aria-label="Play"]');
-            if (playBtn && playBtn.offsetParent !== null) {
-                try {
-                    console.log('[DaddyHD Auto Unmute] Clicking CDN-Live Play button');
-                    simulateRealClick(playBtn);
-                    cdnPlayClicked = true;
-                    changed = true;
-                } catch (e) {
-                    console.error('[DaddyHD Auto Unmute] Failed to click CDN-Live Play button:', e);
-                }
-            }
-        }
-
-        if (!cdnWatermarkHidden) {
-            const watermark = document.querySelector('img[alt="watermark"][src*="logo-cdn-live-tv1.png"]');
-            if (watermark) {
-                try {
-                    console.log('[DaddyHD Auto Unmute] Hiding CDN-Live watermark image');
-                    watermark.style.setProperty('display', 'none', 'important');
-                    watermark.style.setProperty('visibility', 'hidden', 'important');
-                    cdnWatermarkHidden = true;
-                    changed = true;
-                } catch (e) {
-                    console.error('[DaddyHD Auto Unmute] Failed to hide CDN-Live watermark:', e);
-                }
-            }
-        }
-
-        // Hide "CDN Live TV" button if present
-        const cdnLiveBtn = document.querySelector('button.css-rte19r.css-h2k9yu.css-181s0gc .css-17dq96f[aria-label="time"]');
-        if (cdnLiveBtn && cdnLiveBtn.textContent.trim() === 'CDN Live TV') {
-            try {
-                const btn = cdnLiveBtn.closest('button');
-                if (btn) {
-                    btn.style.setProperty('display', 'none', 'important');
-                    btn.style.setProperty('visibility', 'hidden', 'important');
-                    changed = true;
-                    console.log('[DaddyHD Auto Unmute] Hiding CDN Live TV button');
-                }
-            } catch (e) {
-                console.error('[DaddyHD Auto Unmute] Failed to hide CDN Live TV button:', e);
-            }
-        }
-
-        return changed;
-    }
-
     function step() {
-        let changed = false;
-
-        // Handle CDN-Live player pages even if they don't match the usual player UI
-        changed = handleCdnLivePlayer() || changed;
-
-        if (!isPlayerFrame()) return changed;
+        if (!isPlayerFrame()) return false;
 
         attachVideoListeners();
 
         const vChanged = syncVolumeWithPlayer();
         const oChanged = hideOverlayIfPresent();
 
-        return changed || vChanged || oChanged;
+        return vChanged || oChanged;
     }
 
     // Only do work in frames that look like player frames or could become one
@@ -328,11 +175,9 @@
 
     const interval = setInterval(() => {
         attempts++;
-        step();
-        if (isAutomationDone() || attempts >= maxAttempts) {
+        if (step() || attempts >= maxAttempts) {
             console.log('[DaddyHD Auto Unmute] Stop in this frame. videoReady=', videoReady,
                         'volumeSynced=', volumeSynced, 'overlayHidden=', overlayHidden,
-                        'cdnPlayClicked=', cdnPlayClicked, 'cdnWatermarkHidden=', cdnWatermarkHidden,
                         'attempts=', attempts);
             clearInterval(interval);
         }
@@ -340,9 +185,8 @@
 
     const observer = new MutationObserver(() => {
         attachVideoListeners();
-        step();
-        if (isAutomationDone()) {
-            console.log('[DaddyHD Auto Unmute] Automation completed via MutationObserver in this frame.');
+        if (step()) {
+            console.log('[DaddyHD Auto Unmute] Unmuted/hid overlay via MutationObserver in this frame.');
             clearInterval(interval);
             observer.disconnect();
         }
