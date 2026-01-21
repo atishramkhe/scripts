@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KissKH Auto-Next Episode
 // @namespace    https://github.com/atishramkhe
-// @version      1.0.0
+// @version      1.1.0
 // @description  Auto-plays the next episode when the current one ends on kisskh.ovh.
 // @match        https://kisskh.ovh/Drama/*/Episode-*
 // @match        https://kisskh.ovh/Drama/*/Episode-*
@@ -21,6 +21,14 @@
 		rebindPollMs: 1000,
 		restoreFullscreenTtlMs: 60_000,
 	};
+
+	const STORAGE_DEBUG = 'kisskh:autoNext:debug';
+	const DEBUG = readBool(STORAGE_DEBUG, false);
+	function debugLog(...args) {
+		if (!DEBUG) return;
+		// eslint-disable-next-line no-console
+		console.debug('[kisskh:autoNext]', ...args);
+	}
 
 	function isInFullscreen() {
 		return Boolean(
@@ -217,7 +225,7 @@
 		if (restorePendingGestureRetry) return;
 		restorePendingGestureRetry = true;
 
-		const handler = async () => {
+		const handler = () => {
 			// Detach first to keep it truly one-shot.
 			document.removeEventListener('click', handler, true);
 			document.removeEventListener('keydown', handler, true);
@@ -227,20 +235,27 @@
 
 			if (!shouldRestoreFullscreenNow()) return;
 
-			// Give the player a moment to be ready before toggling fullscreen.
-			await waitForVideoReady(lastRestoreVideo, 12_000);
-
-			// Prefer clicking the site's own fullscreen control inside a trusted user gesture.
-			let ok = false;
-			if (clickMatFullscreenButton()) {
-				// Give the click handler a moment to enter fullscreen.
-				await new Promise((r) => setTimeout(r, 0));
-				ok = isInFullscreen();
+			// IMPORTANT: fullscreen must be requested synchronously inside the gesture handler.
+			// Do not await anything before calling requestFullscreen/clicking the control.
+			try {
+				clickMatFullscreenButton();
+				// Fire and forget; the call still counts as within user activation.
+				void requestFullscreenFor(target);
+			} catch {
+				// ignore
 			}
-			if (!ok) ok = await requestFullscreenFor(target);
-			// Clear either way to avoid nagging loops.
-			clearRestoreFullscreenState();
-			return ok;
+
+			// If it worked, clear the restore flag. If not, keep it for another gesture
+			// until TTL expires.
+			setTimeout(() => {
+				if (isInFullscreen()) {
+					debugLog('Fullscreen restored on user gesture');
+					clearRestoreFullscreenState();
+				} else if (shouldRestoreFullscreenNow()) {
+					debugLog('Fullscreen restore still blocked; waiting for next gesture');
+					installOneShotFullscreenRetryOnGesture(target);
+				}
+			}, 250);
 		};
 
 		// Capture phase so we catch the first gesture early.
@@ -281,6 +296,62 @@
 		return /\/Drama\//i.test(href) && /\/Episode-\d+/i.test(href);
 	}
 
+	function getCurrentShowPathPrefix() {
+		// /Drama/<slug>/Episode-1 -> /Drama/<slug>
+		const m = location.pathname.match(/^(\/Drama\/[^/]+)\//i);
+		return m ? m[1] : null;
+	}
+
+	function getEpisodeListFromPage() {
+		const showPrefix = getCurrentShowPathPrefix();
+		const all = getAllEpisodeAnchors();
+		const filtered = all.filter(({ href }) => {
+			if (!showPrefix) return true;
+			try {
+				const u = new URL(href);
+				return u.pathname.startsWith(showPrefix + '/');
+			} catch {
+				return false;
+			}
+		});
+
+		/** @type {Map<number, string>} */
+		const epToHref = new Map();
+		for (const { href } of filtered) {
+			const n = getEpisodeNumberFromUrl(href);
+			if (!n) continue;
+			// Keep first occurrence to avoid oscillating between duplicate links.
+			if (!epToHref.has(n)) epToHref.set(n, href);
+		}
+
+		const episodes = Array.from(epToHref.entries())
+			.map(([n, href]) => ({ n, href }))
+			.sort((a, b) => a.n - b.n);
+		return episodes;
+	}
+
+	function getNextEpisodeFromPage() {
+		const currentEp = getEpisodeNumberFromUrl();
+		if (!currentEp) return { nextHref: null, isLast: false, total: 0 };
+
+		const episodes = getEpisodeListFromPage();
+		if (!episodes.length) return { nextHref: null, isLast: false, total: 0 };
+
+		const total = episodes.length;
+		const idx = episodes.findIndex((e) => e.n === currentEp);
+		if (idx >= 0) {
+			if (idx + 1 < episodes.length) {
+				return { nextHref: episodes[idx + 1].href, isLast: false, total };
+			}
+			return { nextHref: null, isLast: true, total };
+		}
+
+		// If current ep isn't in the list, choose the smallest episode greater than current.
+		const next = episodes.find((e) => e.n > currentEp);
+		if (next) return { nextHref: next.href, isLast: false, total };
+		return { nextHref: null, isLast: true, total };
+	}
+
 	function getAllEpisodeAnchors() {
 		const anchors = Array.from(document.querySelectorAll('a[href]'));
 		return anchors
@@ -292,40 +363,20 @@
 		const currentEp = getEpisodeNumberFromUrl();
 		if (!currentEp) return null;
 
-		// 1) Build an episode map from any episode list links on the page.
-		const all = getAllEpisodeAnchors();
-		const currentPathPrefix = (() => {
-			// /Drama/<slug>/Episode-1 -> /Drama/<slug>/
-			const m = location.pathname.match(/^(\/Drama\/[^/]+)\//i);
-			return m ? m[1] : null;
-		})();
-
-		const candidates = all.filter(({ href }) => {
-			if (!currentPathPrefix) return true;
-			try {
-				const u = new URL(href);
-				return u.pathname.startsWith(currentPathPrefix + '/');
-			} catch {
-				return false;
-			}
-		});
-
-		const epToHref = new Map();
-		for (const { href } of candidates) {
-			const n = getEpisodeNumberFromUrl(href);
-			if (!n) continue;
-			if (!epToHref.has(n)) epToHref.set(n, href);
-		}
-
-		const direct = epToHref.get(currentEp + 1);
-		if (direct) return direct;
+		// 1) Prefer building a deterministic list and picking the next.
+		const nextInfo = getNextEpisodeFromPage();
+		if (nextInfo.nextHref) return nextInfo.nextHref;
 
 		// 2) Fallback: look for a “Next” link/button.
 		const nextTextCandidates = Array.from(document.querySelectorAll('a[href], button'));
 		for (const el of nextTextCandidates) {
 			const text = (el.textContent || '').trim().toLowerCase();
-			if (!text) continue;
-			if (!/(next|>)/.test(text)) continue;
+			const aria = (el.getAttribute?.('aria-label') || '').trim().toLowerCase();
+			const title = (el.getAttribute?.('title') || '').trim().toLowerCase();
+			const hay = `${text} ${aria} ${title}`.trim();
+			if (!hay) continue;
+			// Avoid matching generic arrows; only accept explicit "next".
+			if (!/\bnext\b/.test(hay)) continue;
 
 			if (el.tagName.toLowerCase() === 'a') {
 				const href = normalizeToAbsoluteHref(el.getAttribute('href'));
@@ -437,9 +488,58 @@
 		if (!enabled) return;
 		if (triggeredForThisUrl) return;
 
-		// Prefer the site's in-player Next Episode button. This usually preserves
-		// the existing fullscreen player without requiring any extra user gesture.
+		// If we can see the episode list on the page, stop at the last episode.
+		const nextInfo = getNextEpisodeFromPage();
+		if (nextInfo.isLast) {
+			triggeredForThisUrl = true;
+			debugLog(`At last episode (total=${nextInfo.total}); not advancing`, { reason });
+			return;
+		}
+
+		const currentEp = getEpisodeNumberFromUrl();
+
+		// Prefer the site's in-player Next Episode button to preserve fullscreen.
+		// Some browsers will always exit fullscreen on full page navigation.
+		const btn = findNextEpisodeButton();
+		if (btn && !btn.disabled) {
+			const clicked = clickNextEpisodeButton();
+			if (clicked) {
+				debugLog('Clicked in-player next button', { reason });
+
+				// Safety fallback: if the button fails to advance (or goes backwards),
+				// navigate to the deterministic next episode link (if we have it).
+				if (currentEp && nextInfo.nextHref) {
+					setTimeout(() => {
+						const now = getEpisodeNumberFromUrl();
+						if (!now) return;
+						if (now <= currentEp) {
+							debugLog('Next button did not advance; falling back to URL', {
+								from: currentEp,
+								now,
+							});
+							clickOrNavigateTo(nextInfo.nextHref);
+						}
+					}, 1500);
+				}
+
+				triggeredForThisUrl = true;
+				return;
+			}
+		}
+
+		// Next best: deterministic URL selection from the episode list.
+		if (nextInfo.nextHref) {
+			startCountdownAndGo(nextInfo.nextHref, null);
+			return;
+		}
+
+		// Fallback: use button + heuristic URL guess.
 		const goViaButton = () => {
+			const innerBtn = findNextEpisodeButton();
+			if (innerBtn && innerBtn.disabled) {
+				debugLog('Next button disabled; treating as last episode', { reason });
+				return false;
+			}
 			if (clickNextEpisodeButton()) return true;
 			// fallback to URL-based navigation if button isn't available
 			const nextHref = guessNextEpisodeHref();
