@@ -3,9 +3,9 @@
 // @namespace    http://tampermonkey.net/
 // @version      0.7
 // @description  Wait for video, then unmute player + hide overlay on daddyhd.com / iframe streams
-// @match        https://daddyhd.com/stream/*
+// @match        https://dlhd.link/stream/*
 // @match        https://security.giokko.ru/*
-// @match        https://epicplayplay.cfd/premiumtv/*
+// @match        https://hitsplay.fun/premiumtv/*
 // @run-at       document-idle
 // @grant        none
 // @all-frames   true
