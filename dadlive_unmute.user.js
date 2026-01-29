@@ -5,7 +5,7 @@
 // @description  Wait for video, then unmute player + hide overlay on daddyhd.com / iframe streams
 // @match        https://dlhd.link/stream/*
 // @match        https://security.giokko.ru/*
-// @match        https://hitsplay.fun/premiumtv/*
+// @match        https://codepcplay.fun/premiumtv/*
 // @run-at       document-idle
 // @grant        none
 // @all-frames   true
