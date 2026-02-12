@@ -6,6 +6,7 @@
 // @match        https://dlhd.link/stream/*
 // @match        https://security.giokko.ru/*
 // @match        https://codepcplay.fun/premiumtv/*
+// @match        https://epaly.fun/*
 // @run-at       document-idle
 // @grant        none
 // @all-frames   true
