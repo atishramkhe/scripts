@@ -32,7 +32,7 @@
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/dadlive_unmute.user.js', 
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cdn_autoplay.user.js', 
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cdn_adblock.user.js', 
-        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/kisskh_autoplay.user.js'
+        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_drama_helpers.user.js'
         // Add more script URLs here as needed
     ];
 
