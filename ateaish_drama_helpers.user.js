@@ -8,7 +8,7 @@
 // @match        https://kisskh.la/*
 // @match        https://atishramkhe.github.io/drama/*
 // @match        https://localhost:8000/drama/*
-// @run-at       document-idle
+// @run-at       document-start
 // @grant        GM_xmlhttpRequest
 // @connect      kisskh.ovh
 // @connect      kisskh.co
@@ -774,14 +774,13 @@
 	// ─────────────────────────────────────────────
 	//  INIT
 	// ─────────────────────────────────────────────
-	function init() {
-		if (!isKisskhSite) {
-			// On the ateaish drama page — only install API bridge
-			installApiBridge();
-			return;
-		}
 
-		// On kisskh site — run all companion features
+	// API bridge needs NO DOM — install immediately on drama page
+	if (!isKisskhSite) {
+		installApiBridge();
+	}
+
+	function initKisskh() {
 		log(`Initialized (embedded: ${isEmbedded}, EP: ${getEpisodeFromUrl() || 'N/A'})`);
 
 		hookHistory();
@@ -792,9 +791,11 @@
 		pollForVideo();
 	}
 
-	if (document.readyState === 'loading') {
-		document.addEventListener('DOMContentLoaded', init);
-	} else {
-		init();
+	if (isKisskhSite) {
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', initKisskh);
+		} else {
+			initKisskh();
+		}
 	}
 })();
