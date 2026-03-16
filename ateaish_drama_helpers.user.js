@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ateaish drama helpers (kisskh companion)
 // @namespace    https://github.com/atishramkhe
-// @version      1.2.0
+// @version      1.2.1
 // @description  Companion script for ateaish drama — progress tracking, resume, ad hiding, keyboard shortcuts, parent-frame sync, and CORS-free API bridge for kisskh.ovh
 // @match        https://kisskh.ovh/*
 // @match        https://kisskh.co/*
@@ -150,6 +150,15 @@
 		if (_progressInterval) { clearInterval(_progressInterval); _progressInterval = null; }
 	}
 
+	function saveAndReportProgress(type, video, overrides = {}) {
+		const data = buildProgressData(video);
+		if (!data) return null;
+		Object.assign(data, overrides);
+		saveProgress(data);
+		postToParent(type, data);
+		return data;
+	}
+
 	// ─────────────────────────────────────────────
 	//  2. AUTO-RESUME FROM SAVED POSITION
 	//     Priority: URL hash (#ateaish_resume=X) > localStorage
@@ -161,6 +170,14 @@
 			const h = location.hash;
 			const m = h.match(/ateaish_resume=(\d+(?:\.\d+)?)/);
 			return m ? parseFloat(m[1]) : null;
+		} catch { return null; }
+	}
+
+	function getRequestedEpisodeFromHash() {
+		try {
+			const h = location.hash;
+			const m = h.match(/ateaish_episode=(\d+)/);
+			return m ? Number(m[1]) : null;
 		} catch { return null; }
 	}
 
@@ -468,26 +485,105 @@
 		return m ? m[1] : null;
 	}
 
-	function findEpisodeAnchor(epNum) {
-		const prefix = getShowPathPrefix();
-		const all = getAllEpisodeAnchors();
-		for (const { a, href } of all) {
-			try {
-				const u = new URL(href);
-				if (prefix && !u.pathname.startsWith(prefix + '/')) continue;
-				const m = u.pathname.match(/\/Episode-(\d+)/i);
-				if (m && Number(m[1]) === epNum) return a;
-			} catch {}
-		}
+	function extractEpisodeNumberFromString(value) {
+		if (!value) return null;
+		const normalized = String(value).replace(/\s+/g, ' ').trim();
+		let match = normalized.match(/(?:^|\b)(?:episode|ep)\s*[-:#.]?\s*(\d+)(?:\b|$)/i);
+		if (match) return Number(match[1]);
+		match = normalized.match(/^#?(\d{1,4})(?:\.0)?$/);
+		if (match) return Number(match[1]);
 		return null;
 	}
 
-	function highlightCurrentEpisode() {
-		const ep = getEpisodeFromUrl();
+	function getEpisodeTargetCandidates() {
+		const selector = [
+			'a[href]',
+			'button',
+			'[role="button"]',
+			'[class*="episode" i]',
+			'[class*="ep-" i]',
+			'mat-list-item',
+			'li',
+			'div',
+			'span',
+		].join(',');
+
+		return Array.from(document.querySelectorAll(selector)).filter(el => {
+			if (!el || el === document.body || el === document.documentElement) return false;
+			const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+			const href = el.getAttribute && (el.getAttribute('href') || el.getAttribute('routerlink') || el.getAttribute('ng-reflect-router-link'));
+			const aria = el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-title'));
+			return Boolean(href || aria || extractEpisodeNumberFromString(text));
+		});
+	}
+
+	function findEpisodeTarget(epNum) {
+		const prefix = getShowPathPrefix();
+		const candidates = getEpisodeTargetCandidates();
+		let best = null;
+		let bestScore = -1;
+
+		for (const el of candidates) {
+			try {
+				const href = el.getAttribute && (el.getAttribute('href') || el.getAttribute('routerlink') || el.getAttribute('ng-reflect-router-link'));
+				const aria = el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-title'));
+				const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+
+				let matchedEpisode = null;
+				let score = 0;
+
+				if (href) {
+					const u = new URL(href, location.origin);
+					if (prefix && u.pathname.startsWith(prefix + '/')) score += 25;
+					const hrefMatch = u.pathname.match(/\/Episode-(\d+)/i);
+					if (hrefMatch) {
+						matchedEpisode = Number(hrefMatch[1]);
+						score += 120;
+					}
+				}
+
+				if (matchedEpisode == null) {
+					matchedEpisode = extractEpisodeNumberFromString(aria) || extractEpisodeNumberFromString(text);
+					if (matchedEpisode != null) score += aria ? 90 : 70;
+				}
+
+				if (matchedEpisode !== epNum) continue;
+
+				if (/button/i.test(el.tagName)) score += 16;
+				if ((el.getAttribute && el.getAttribute('role')) === 'button') score += 14;
+				if (el.closest('mat-list-item, [class*="episode" i], [class*="ep-" i], li')) score += 12;
+				if (text === String(epNum) || new RegExp(`^(?:episode|ep)\\s*${epNum}$`, 'i').test(text)) score += 12;
+
+				if (score > bestScore) {
+					best = el;
+					bestScore = score;
+				}
+			} catch {}
+		}
+
+		return best;
+	}
+
+	function activateEpisodeTarget(target) {
+		if (!target) return false;
+		const clickable = target.closest('a[href], button, [role="button"], mat-list-item, li, [class*="episode" i], [class*="ep-" i]') || target;
+		try {
+			clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+			if (typeof clickable.click === 'function') clickable.click();
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	function highlightEpisode(ep, label = 'NOW', className = 'ateaish-ep-highlight') {
 		if (!ep) return;
 
 		// Remove old highlights
-		document.querySelectorAll('.ateaish-ep-highlight').forEach(el => el.classList.remove('ateaish-ep-highlight'));
+		document.querySelectorAll('.ateaish-ep-highlight, .ateaish-ep-resume').forEach(el => {
+			el.classList.remove('ateaish-ep-highlight');
+			el.classList.remove('ateaish-ep-resume');
+		});
 
 		// Inject highlight style once
 		if (!document.getElementById('ateaish-ep-style')) {
@@ -516,43 +612,82 @@
 					pointer-events: none;
 					z-index: 10;
 				}
+				.ateaish-ep-resume {
+					outline: 2px solid #fc35a5 !important;
+					outline-offset: -2px !important;
+					background: rgba(252, 53, 165, 0.16) !important;
+					border-radius: 4px !important;
+					position: relative !important;
+					box-shadow: 0 0 10px rgba(252, 53, 165, 0.42) !important;
+				}
+				.ateaish-ep-resume::after {
+					content: attr(data-ateaish-label);
+					position: absolute;
+					top: 2px;
+					right: 4px;
+					font-size: 9px;
+					font-weight: bold;
+					color: #fc35a5;
+					background: rgba(0,0,0,0.74);
+					padding: 1px 4px;
+					border-radius: 3px;
+					pointer-events: none;
+					z-index: 10;
+				}
 			`;
 			document.head.appendChild(style);
 		}
 
 		// Find and highlight the current episode link/item
-		const anchor = findEpisodeAnchor(ep);
-		if (anchor) {
-			// Highlight the anchor or its parent list-item/container
-			const target = anchor.closest('mat-list-item, li, [class*="episode" i], [class*="ep-" i]') || anchor;
-			target.classList.add('ateaish-ep-highlight');
+		const target = findEpisodeTarget(ep);
+		if (target) {
+			const highlightTarget = target.closest('mat-list-item, li, [class*="episode" i], [class*="ep-" i], a[href], button, [role="button"]') || target;
+			highlightTarget.classList.add(className);
+			highlightTarget.setAttribute('data-ateaish-label', label === 'NOW' ? '▶ NOW' : label);
 
 			// Scroll it into view
 			setTimeout(() => {
-				target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+				highlightTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 			}, 300);
 
-			dbg(`Highlighted EP ${ep}`);
+			dbg(`Highlighted EP ${ep} (${label})`);
+		} else if (label !== 'NOW') {
+			showToast(`Resume EP ${ep}`);
 		}
+	}
+
+	function highlightCurrentEpisode() {
+		highlightEpisode(getEpisodeFromUrl(), '▶ NOW', 'ateaish-ep-highlight');
+	}
+
+	function highlightRequestedEpisode() {
+		const requested = getRequestedEpisodeFromHash();
+		if (!requested) return;
+		const current = getEpisodeFromUrl();
+		if (current === requested) {
+			highlightCurrentEpisode();
+			return;
+		}
+		highlightEpisode(requested, 'RESUME', 'ateaish-ep-resume');
 	}
 
 	function navigateToCorrectEpisode() {
 		if (_episodeNavAttempted) return;
 		_episodeNavAttempted = true;
 
-		const targetEp = getEpisodeFromUrl();
+		const targetEp = getRequestedEpisodeFromHash() || getEpisodeFromUrl();
 		if (!targetEp) return;
 
 		// Wait for the episode list to render (Angular SPA needs time)
 		const tryNav = (attempt = 0) => {
-			if (attempt > 10) {
-				log(`Could not find EP ${targetEp} link after ${attempt} attempts, highlighting only`);
-				highlightCurrentEpisode();
+			if (attempt > 20) {
+				log(`Could not find EP ${targetEp} link after ${attempt} attempts, highlighting requested episode`);
+				highlightRequestedEpisode();
 				return;
 			}
 
-			const anchor = findEpisodeAnchor(targetEp);
-			if (!anchor) {
+			const target = findEpisodeTarget(targetEp);
+			if (!target) {
 				// Episode list might not be rendered yet
 				setTimeout(() => tryNav(attempt + 1), 500);
 				return;
@@ -560,21 +695,23 @@
 
 			// Check if we're already on the right episode by comparing URL
 			try {
-				const anchorHref = new URL(anchor.getAttribute('href'), location.origin).href;
+				const href = target.getAttribute && (target.getAttribute('href') || target.getAttribute('routerlink') || target.getAttribute('ng-reflect-router-link'));
+				if (!href) throw new Error('no href');
+				const anchorHref = new URL(href, location.origin).href;
 				const currentHref = location.href.split('#')[0];
 				if (anchorHref === currentHref || new URL(anchorHref).pathname === new URL(currentHref).pathname) {
 					// Already on the right episode, just highlight
-					highlightCurrentEpisode();
+					highlightEpisode(targetEp, '▶ NOW', 'ateaish-ep-highlight');
 					return;
 				}
 			} catch {}
 
 			// Click the episode link to navigate
 			log(`Clicking EP ${targetEp} link to navigate`);
-			anchor.click();
+			activateEpisodeTarget(target);
 
 			// Highlight after navigation
-			setTimeout(highlightCurrentEpisode, 1000);
+			setTimeout(() => highlightEpisode(targetEp, 'RESUME', 'ateaish-ep-resume'), 1000);
 		};
 
 		// Start after a short delay to let the SPA initialize
@@ -599,37 +736,32 @@
 
 		// On ended: notify parent, save final progress
 		video.addEventListener('ended', () => {
-			const data = buildProgressData(video);
-			if (data) {
-				data.percent = 100;
-				saveProgress(data);
-				postToParent('ended', data);
-			}
+			const data = saveAndReportProgress('ended', video, { percent: 100 });
 			log(`EP ${data?.episode || '?'} ended`);
 		}, { once: true });
 
 		// On pause: save immediately
 		video.addEventListener('pause', () => {
-			const data = buildProgressData(video);
-			if (data) {
-				saveProgress(data);
-				postToParent('pause', data);
-			}
+			saveAndReportProgress('pause', video);
 		}, { passive: true });
 
 		// On seeked: save immediately
 		video.addEventListener('seeked', () => {
-			const data = buildProgressData(video);
-			if (data) {
-				saveProgress(data);
-				postToParent('progress', data);
-			}
+			saveAndReportProgress('progress', video);
+		}, { passive: true });
+
+		const flushProgress = () => saveAndReportProgress('pause', video);
+		window.addEventListener('pagehide', flushProgress, { passive: true });
+		window.addEventListener('beforeunload', flushProgress, { passive: true });
+		document.addEventListener('visibilitychange', () => {
+			if (document.visibilityState === 'hidden') flushProgress();
 		}, { passive: true });
 	}
 
 	function pollForVideo() {
 		const check = () => {
 			checkForNavigation();
+			highlightRequestedEpisode();
 			const v = pickBestVideo();
 			if (v && v !== _boundVideo) {
 				bindVideo(v);
@@ -689,14 +821,20 @@
 					break;
 				case 'navigateEpisode':
 					if (typeof e.data.episode === 'number') {
-						const epAnchor = findEpisodeAnchor(e.data.episode);
-						if (epAnchor) {
+						const epTarget = findEpisodeTarget(e.data.episode);
+						if (epTarget) {
 							log(`Navigating to EP ${e.data.episode} via postMessage command`);
-							epAnchor.click();
-							setTimeout(highlightCurrentEpisode, 1000);
+							activateEpisodeTarget(epTarget);
+							setTimeout(() => highlightEpisode(e.data.episode, 'RESUME', 'ateaish-ep-resume'), 1000);
 						} else {
-							dbg(`EP ${e.data.episode} anchor not found (expected when embedded)`);
+							highlightEpisode(e.data.episode, 'RESUME', 'ateaish-ep-resume');
+							dbg(`EP ${e.data.episode} anchor not found yet; highlighted requested slot when available`);
 						}
+					}
+					break;
+				case 'highlightEpisode':
+					if (typeof e.data.episode === 'number') {
+						highlightEpisode(e.data.episode, 'RESUME', 'ateaish-ep-resume');
 					}
 					break;
 			}
