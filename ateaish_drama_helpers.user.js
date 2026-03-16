@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ateaish drama helpers (kisskh companion)
 // @namespace    https://github.com/atishramkhe
-// @version      1.2.1
+// @version      1.2.2
 // @description  Companion script for ateaish drama — progress tracking, resume, ad hiding, keyboard shortcuts, parent-frame sync, and CORS-free API bridge for kisskh.ovh
 // @match        https://kisskh.ovh/*
 // @match        https://kisskh.co/*
@@ -445,6 +445,8 @@
 			const ep = getEpisodeFromUrl();
 			if (ep && ep !== _lastEpisode) {
 				_lastEpisode = ep;
+				_episodeHighlightResolved = false;
+				stopEpisodeMutationObserver();
 				onEpisodeChange(ep);
 			}
 		}
@@ -472,6 +474,12 @@
 	//     the current episode in the episode list.
 	// ─────────────────────────────────────────────
 	let _episodeNavAttempted = false;
+	let _episodePanelRevealAttempted = false;
+	let _episodeObserverInstalled = false;
+	let _episodeObserver = null;
+	let _episodeObserverAttempts = 0;
+	let _pendingHighlightTimer = null;
+	let _episodeHighlightResolved = false;
 
 	function getAllEpisodeAnchors() {
 		const anchors = Array.from(document.querySelectorAll('a[href]'));
@@ -497,15 +505,19 @@
 
 	function getEpisodeTargetCandidates() {
 		const selector = [
+			'a[href*="/Episode-"]',
 			'a[href]',
+			'[routerlink*="/Episode-"]',
+			'[ng-reflect-router-link*="/Episode-"]',
 			'button',
 			'[role="button"]',
+			'[role="tab"]',
 			'[class*="episode" i]',
 			'[class*="ep-" i]',
+			'[data-episode]',
+			'[data-ep]',
 			'mat-list-item',
 			'li',
-			'div',
-			'span',
 		].join(',');
 
 		return Array.from(document.querySelectorAll(selector)).filter(el => {
@@ -513,7 +525,12 @@
 			const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
 			const href = el.getAttribute && (el.getAttribute('href') || el.getAttribute('routerlink') || el.getAttribute('ng-reflect-router-link'));
 			const aria = el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-title'));
-			return Boolean(href || aria || extractEpisodeNumberFromString(text));
+			const dataEpisode = el.getAttribute && (el.getAttribute('data-episode') || el.getAttribute('data-ep'));
+			if (href && /\/Episode-\d+/i.test(href)) return true;
+			if (dataEpisode && /^\d+$/.test(String(dataEpisode))) return true;
+			if (aria && extractEpisodeNumberFromString(aria) != null) return true;
+			if (extractEpisodeNumberFromString(text) == null) return false;
+			return Boolean(el.closest('mat-list-item, li, [class*="episode" i], [class*="ep-" i], [role="tablist"], [class*="tab" i], [class*="list" i], [class*="item" i], [class*="panel" i]'));
 		});
 	}
 
@@ -527,10 +544,16 @@
 			try {
 				const href = el.getAttribute && (el.getAttribute('href') || el.getAttribute('routerlink') || el.getAttribute('ng-reflect-router-link'));
 				const aria = el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-title'));
+				const dataEpisode = el.getAttribute && (el.getAttribute('data-episode') || el.getAttribute('data-ep'));
 				const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
 
 				let matchedEpisode = null;
 				let score = 0;
+
+				if (dataEpisode && /^\d+$/.test(String(dataEpisode))) {
+					matchedEpisode = Number(dataEpisode);
+					score += 100;
+				}
 
 				if (href) {
 					const u = new URL(href, location.origin);
@@ -564,6 +587,27 @@
 		return best;
 	}
 
+	function stopEpisodeMutationObserver() {
+		if (_episodeObserver) {
+			try { _episodeObserver.disconnect(); } catch {}
+			_episodeObserver = null;
+		}
+		_episodeObserverInstalled = false;
+		_episodeObserverAttempts = 0;
+		if (_pendingHighlightTimer) {
+			clearTimeout(_pendingHighlightTimer);
+			_pendingHighlightTimer = null;
+		}
+	}
+
+	function scheduleRequestedEpisodeHighlight(delay = 160) {
+		if (_pendingHighlightTimer) clearTimeout(_pendingHighlightTimer);
+		_pendingHighlightTimer = setTimeout(() => {
+			_pendingHighlightTimer = null;
+			highlightRequestedEpisode();
+		}, delay);
+	}
+
 	function activateEpisodeTarget(target) {
 		if (!target) return false;
 		const clickable = target.closest('a[href], button, [role="button"], mat-list-item, li, [class*="episode" i], [class*="ep-" i]') || target;
@@ -576,8 +620,49 @@
 		}
 	}
 
+	function ensureEpisodePanelVisible() {
+		if (_episodePanelRevealAttempted) return false;
+		const toggles = Array.from(document.querySelectorAll('button, [role="button"], [role="tab"], a, div, span')).filter(el => {
+			const text = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+			if (!text) return false;
+			return text === 'episodes' || text === 'episode list' || text === 'all episodes' || text === 'eps';
+		});
+
+		const target = toggles.find(el => {
+			const selected = el.getAttribute && (el.getAttribute('aria-selected') || el.getAttribute('aria-expanded'));
+			return !selected || selected === 'false';
+		}) || toggles[0];
+
+		if (!target) return false;
+		_episodePanelRevealAttempted = true;
+		log('Opening episode panel');
+		return activateEpisodeTarget(target);
+	}
+
+	function installEpisodeMutationObserver() {
+		if (_episodeObserverInstalled) return;
+		const root = document.body || document.documentElement;
+		if (!root) return;
+
+		_episodeObserver = new MutationObserver(() => {
+			if (!getRequestedEpisodeFromHash() || _episodeHighlightResolved) {
+				stopEpisodeMutationObserver();
+				return;
+			}
+			_episodeObserverAttempts += 1;
+			if (_episodeObserverAttempts > 30) {
+				stopEpisodeMutationObserver();
+				return;
+			}
+			scheduleRequestedEpisodeHighlight();
+		});
+
+		_episodeObserver.observe(root, { childList: true, subtree: true });
+		_episodeObserverInstalled = true;
+	}
+
 	function highlightEpisode(ep, label = 'NOW', className = 'ateaish-ep-highlight') {
-		if (!ep) return;
+		if (!ep) return false;
 
 		// Remove old highlights
 		document.querySelectorAll('.ateaish-ep-highlight, .ateaish-ep-resume').forEach(el => {
@@ -598,20 +683,6 @@
 					position: relative !important;
 					box-shadow: 0 0 8px rgba(224, 39, 53, 0.4) !important;
 				}
-				.ateaish-ep-highlight::after {
-					content: '▶ NOW';
-					position: absolute;
-					top: 2px;
-					right: 4px;
-					font-size: 9px;
-					font-weight: bold;
-					color: #e02735;
-					background: rgba(0,0,0,0.7);
-					padding: 1px 4px;
-					border-radius: 3px;
-					pointer-events: none;
-					z-index: 10;
-				}
 				.ateaish-ep-resume {
 					outline: 2px solid #fc35a5 !important;
 					outline-offset: -2px !important;
@@ -619,20 +690,6 @@
 					border-radius: 4px !important;
 					position: relative !important;
 					box-shadow: 0 0 10px rgba(252, 53, 165, 0.42) !important;
-				}
-				.ateaish-ep-resume::after {
-					content: attr(data-ateaish-label);
-					position: absolute;
-					top: 2px;
-					right: 4px;
-					font-size: 9px;
-					font-weight: bold;
-					color: #fc35a5;
-					background: rgba(0,0,0,0.74);
-					padding: 1px 4px;
-					border-radius: 3px;
-					pointer-events: none;
-					z-index: 10;
 				}
 			`;
 			document.head.appendChild(style);
@@ -643,40 +700,54 @@
 		if (target) {
 			const highlightTarget = target.closest('mat-list-item, li, [class*="episode" i], [class*="ep-" i], a[href], button, [role="button"]') || target;
 			highlightTarget.classList.add(className);
-			highlightTarget.setAttribute('data-ateaish-label', label === 'NOW' ? '▶ NOW' : label);
-
 			// Scroll it into view
 			setTimeout(() => {
 				highlightTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 			}, 300);
 
 			dbg(`Highlighted EP ${ep} (${label})`);
+			return true;
 		} else if (label !== 'NOW') {
-			showToast(`Resume EP ${ep}`);
+			ensureEpisodePanelVisible();
 		}
+
+		return false;
 	}
 
 	function highlightCurrentEpisode() {
-		highlightEpisode(getEpisodeFromUrl(), '▶ NOW', 'ateaish-ep-highlight');
+		const current = getEpisodeFromUrl();
+		const success = highlightEpisode(current, '▶ NOW', 'ateaish-ep-highlight');
+		if (success && getRequestedEpisodeFromHash() === current) {
+			_episodeHighlightResolved = true;
+			stopEpisodeMutationObserver();
+		}
+		return success;
 	}
 
 	function highlightRequestedEpisode() {
+		if (_episodeHighlightResolved) return true;
 		const requested = getRequestedEpisodeFromHash();
-		if (!requested) return;
+		if (!requested) return false;
 		const current = getEpisodeFromUrl();
 		if (current === requested) {
-			highlightCurrentEpisode();
-			return;
+			return highlightCurrentEpisode();
 		}
-		highlightEpisode(requested, 'RESUME', 'ateaish-ep-resume');
+		const success = highlightEpisode(requested, 'RESUME', 'ateaish-ep-resume');
+		if (success) {
+			_episodeHighlightResolved = true;
+			stopEpisodeMutationObserver();
+		}
+		return success;
 	}
 
 	function navigateToCorrectEpisode() {
 		if (_episodeNavAttempted) return;
 		_episodeNavAttempted = true;
+		_episodeHighlightResolved = false;
 
 		const targetEp = getRequestedEpisodeFromHash() || getEpisodeFromUrl();
 		if (!targetEp) return;
+		installEpisodeMutationObserver();
 
 		// Wait for the episode list to render (Angular SPA needs time)
 		const tryNav = (attempt = 0) => {
@@ -688,8 +759,11 @@
 
 			const target = findEpisodeTarget(targetEp);
 			if (!target) {
+				if (attempt === 3 || attempt === 8 || attempt === 16) {
+					ensureEpisodePanelVisible();
+				}
 				// Episode list might not be rendered yet
-				setTimeout(() => tryNav(attempt + 1), 500);
+				setTimeout(() => tryNav(attempt + 1), 750);
 				return;
 			}
 
@@ -702,6 +776,8 @@
 				if (anchorHref === currentHref || new URL(anchorHref).pathname === new URL(currentHref).pathname) {
 					// Already on the right episode, just highlight
 					highlightEpisode(targetEp, '▶ NOW', 'ateaish-ep-highlight');
+					_episodeHighlightResolved = true;
+					stopEpisodeMutationObserver();
 					return;
 				}
 			} catch {}
@@ -761,7 +837,7 @@
 	function pollForVideo() {
 		const check = () => {
 			checkForNavigation();
-			highlightRequestedEpisode();
+			if (!_episodeHighlightResolved) highlightRequestedEpisode();
 			const v = pickBestVideo();
 			if (v && v !== _boundVideo) {
 				bindVideo(v);
@@ -827,6 +903,7 @@
 							activateEpisodeTarget(epTarget);
 							setTimeout(() => highlightEpisode(e.data.episode, 'RESUME', 'ateaish-ep-resume'), 1000);
 						} else {
+							ensureEpisodePanelVisible();
 							highlightEpisode(e.data.episode, 'RESUME', 'ateaish-ep-resume');
 							dbg(`EP ${e.data.episode} anchor not found yet; highlighted requested slot when available`);
 						}
@@ -925,6 +1002,7 @@
 		hideAdsAndClutter();
 		installKeyboardShortcuts();
 		installMessageListener();
+		installEpisodeMutationObserver();
 		navigateToCorrectEpisode();
 		pollForVideo();
 	}
