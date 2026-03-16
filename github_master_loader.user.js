@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        GitHub Master Script Loader (URL-Aware with Caching)
 // @namespace   atishramkhe
-// @version     4.3
+// @version     4.4
 // @description Loads and executes other Violentmonkey scripts from your GitHub repository, respecting their @match/@include/@exclude directives, with caching.
 // @author      Ateaish
 // @match       *://*/*
@@ -122,40 +122,63 @@
         return (matches && includes && !excludes);
     }
 
-    function patchGMAddStyle(scriptContent) {
-        // Replace GM_addStyle with a function that injects CSS into the page
-        const patch = `
-function GM_addStyle(css) {
-    var style = document.createElement('style');
-    style.textContent = css;
-    document.head.appendChild(style);
-}
-`;
-        // Only patch if GM_addStyle is used
-        if (scriptContent.includes('GM_addStyle')) {
-            return patch + scriptContent;
-        }
-        return scriptContent;
+    function buildSandboxApis() {
+        const gmObject = typeof GM !== 'undefined' ? GM : undefined;
+        const gmXmlhttpRequest = typeof GM_xmlhttpRequest === 'function'
+            ? GM_xmlhttpRequest
+            : (gmObject && typeof gmObject.xmlHttpRequest === 'function'
+                ? (...args) => gmObject.xmlHttpRequest(...args)
+                : null);
+        const gmAddStyleCompat = typeof GM_addStyle === 'function'
+            ? GM_addStyle
+            : (css) => {
+                const style = document.createElement('style');
+                style.textContent = css;
+                document.head.appendChild(style);
+            };
+        const gmSetValueCompat = typeof GM_setValue === 'function'
+            ? GM_setValue
+            : (gmObject && typeof gmObject.setValue === 'function'
+                ? (...args) => gmObject.setValue(...args)
+                : () => undefined);
+        const gmGetValueCompat = typeof GM_getValue === 'function'
+            ? GM_getValue
+            : (gmObject && typeof gmObject.getValue === 'function'
+                ? (...args) => gmObject.getValue(...args)
+                : () => undefined);
+
+        return {
+            GM: gmObject,
+            GM_xmlhttpRequest: gmXmlhttpRequest,
+            GM_addStyle: gmAddStyleCompat,
+            GM_setValue: gmSetValueCompat,
+            GM_getValue: gmGetValueCompat,
+        };
     }
 
     function executeScript(scriptContent, url) {
         try {
-            // Patch GM_addStyle for page context
-            scriptContent = patchGMAddStyle(scriptContent);
-
-            // Check if Trusted Types are supported
-            if (window.trustedTypes && window.trustedTypes.createPolicy) {
-                const policy = window.trustedTypes.createPolicy('script-loader', {
-                    createScript: content => content,
-                });
-                const trustedScript = policy.createScript(scriptContent);
-                const scriptEl = document.createElement('script');
-                scriptEl.textContent = trustedScript;
-                document.head.appendChild(scriptEl).remove();
-            } else {
-                // Fallback for browsers that don't support Trusted Types
-                eval(scriptContent);
+            const sandboxApis = buildSandboxApis();
+            if (scriptContent.includes('GM_xmlhttpRequest') && !sandboxApis.GM_xmlhttpRequest) {
+                throw new Error('GM_xmlhttpRequest is unavailable in the loader context');
             }
+
+            const runner = new Function(
+                'GM',
+                'GM_xmlhttpRequest',
+                'GM_addStyle',
+                'GM_setValue',
+                'GM_getValue',
+                scriptContent
+            );
+
+            runner(
+                sandboxApis.GM,
+                sandboxApis.GM_xmlhttpRequest,
+                sandboxApis.GM_addStyle,
+                sandboxApis.GM_setValue,
+                sandboxApis.GM_getValue
+            );
             console.log(`[Master Script] Executed fetched script: ${url}`);
         } catch (e) {
             console.error(`[Master Script] Error executing fetched script from ${url}:`, e);
