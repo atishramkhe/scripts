@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         DaddyHD Auto Unmute
 // @namespace    http://tampermonkey.net/
-// @version      0.7
+// @version      0.8
 // @description  Wait for video, then unmute player + hide overlay on daddyhd.com / iframe streams
 // @match        https://dlstreams.top/*
 // @match        https://security.giokko.ru/*
-// @match        https://adffdafdsafds.sbs//premiumtv/*
+// @match        https://freestyleridesx.lol*
 // @run-at       document-idle
 // @grant        none
 // @all-frames   true
