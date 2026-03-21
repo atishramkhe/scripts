@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ateaish Anime Player Automation
 // @namespace    https://atishramkhe.github.io/
-// @version      0.1.0
+// @version      0.1.2
 // @description  Forces autoplay when possible, auto-clicks skip intro/outro buttons, reports playback for auto-next, and keeps skip settings synced with the anime page.
 // @author       you
 // @run-at       document-start
@@ -117,6 +117,23 @@
     return HOSTNAME === 'video.sibnet.ru' || HOSTNAME.endsWith('.sibnet.ru');
   }
 
+  function dispatchClick(element) {
+    if (!element) return false;
+    try {
+      ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
+        element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      });
+      return true;
+    } catch {
+      try {
+        element.click();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
   function isParentAnimePage() {
     if (!HOSTNAME.includes('atishramkhe.github.io')) return false;
     return /(^|\/)anime(\/|$)/.test(String(location.pathname || '').toLowerCase());
@@ -218,15 +235,92 @@
     return rect.width > 0 && rect.height > 0;
   }
 
+  function collectSearchRoots(root = document, seen = new Set(), roots = []) {
+    if (!root || seen.has(root)) return roots;
+    seen.add(root);
+    roots.push(root);
+
+    let elements = [];
+    try {
+      if (typeof root.querySelectorAll === 'function') {
+        elements = Array.from(root.querySelectorAll('*'));
+      }
+    } catch {
+      elements = [];
+    }
+
+    for (const element of elements) {
+      try {
+        if (element.shadowRoot) {
+          collectSearchRoots(element.shadowRoot, seen, roots);
+        }
+      } catch {
+        // ignore shadow access failures
+      }
+
+      if (String(element.tagName || '').toLowerCase() !== 'iframe') continue;
+      try {
+        const iframeDoc = element.contentDocument;
+        if (iframeDoc && iframeDoc.documentElement) {
+          collectSearchRoots(iframeDoc, seen, roots);
+        }
+      } catch {
+        // Cross-origin iframe; ignore.
+      }
+    }
+
+    return roots;
+  }
+
+  function getSearchRoots() {
+    return collectSearchRoots(document);
+  }
+
+  function querySelectorDeep(selectors) {
+    const list = Array.isArray(selectors) ? selectors : [selectors];
+    const roots = getSearchRoots();
+    for (const selector of list) {
+      for (const root of roots) {
+        try {
+          const match = root.querySelector(selector);
+          if (match) return match;
+        } catch {
+          // ignore invalid selector/root pairs
+        }
+      }
+    }
+    return null;
+  }
+
+  function querySelectorAllDeep(selector) {
+    const results = [];
+    const seen = new Set();
+    const roots = getSearchRoots();
+    for (const root of roots) {
+      let matches = [];
+      try {
+        matches = Array.from(root.querySelectorAll(selector));
+      } catch {
+        matches = [];
+      }
+      for (const match of matches) {
+        if (seen.has(match)) continue;
+        seen.add(match);
+        results.push(match);
+      }
+    }
+    return results;
+  }
+
   function clickVisibleSelector(selectors) {
     for (const selector of selectors) {
-      const element = document.querySelector(selector);
+      const element = querySelectorDeep(selector);
       if (!isVisible(element)) continue;
       const lastClickAt = Number(element.__ateaishAutoClickedAt || 0);
       if (Date.now() - lastClickAt < 1200) continue;
       try {
         element.__ateaishAutoClickedAt = Date.now();
-        element.click();
+        dispatchClick(element);
         log('Clicked selector', selector);
         return true;
       } catch {
@@ -237,7 +331,7 @@
   }
 
   function clickMatchingButton(matcher) {
-    const candidates = document.querySelectorAll('button, [role="button"], a, div, span, .jw-skip, .skip-intro, .skip-outro, [data-skip], [data-name*="skip" i], [data-testid*="skip" i], [class*="skip" i], [id*="skip" i]');
+    const candidates = querySelectorAllDeep('button, [role="button"], a, div, span, .jw-skip, .skip-intro, .skip-outro, [data-skip], [data-name*="skip" i], [data-testid*="skip" i], [class*="skip" i], [id*="skip" i], [aria-label*="skip" i], [title*="skip" i]');
     for (const candidate of candidates) {
       if (!isVisible(candidate)) continue;
       const text = `${candidate.textContent || ''} ${candidate.getAttribute('aria-label') || ''} ${candidate.className || ''} ${candidate.id || ''}`.toLowerCase();
@@ -246,7 +340,7 @@
       if (Date.now() - lastClickAt < 5000) continue;
       try {
         candidate.__ateaishSkipClickedAt = Date.now();
-        candidate.click();
+        dispatchClick(candidate);
         log('Clicked skip button', text.trim());
         return true;
       } catch {
@@ -378,6 +472,14 @@
     let lastEndedAt = 0;
     let seekApplied = false;
 
+    function getCurrentStatePayload() {
+      return {
+        malId: playerState.malId,
+        token: playerState.token,
+        host: HOSTNAME,
+      };
+    }
+
     function postProgress(video) {
       if (!settings.reportProgress) return;
       if (!playerState.malId || !playerState.token || !video) return;
@@ -418,9 +520,7 @@
 
       postToTop({
         type: 'ateaish_player_ended',
-        malId: playerState.malId,
-        token: playerState.token,
-        host: HOSTNAME,
+        ...getCurrentStatePayload(),
         at: now,
       });
     }
@@ -531,6 +631,122 @@
       }, profile.retryIntervalMs);
     }
 
+    function postJwProgress(player) {
+      if (!settings.reportProgress) return;
+      if (!playerState.malId || !playerState.token || !player) return;
+      const now = Date.now();
+      if (now - lastProgressAt < 1000) return;
+      lastProgressAt = now;
+      try {
+        const currentTime = Number(player.getPosition());
+        const duration = Number(player.getDuration());
+        if (!Number.isFinite(currentTime) || currentTime < 0) return;
+        if (!Number.isFinite(duration) || duration <= 0) return;
+        postToTop({
+          type: 'ateaish_player_progress',
+          ...getCurrentStatePayload(),
+          currentTime,
+          duration,
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    function maybePreEndJwPlayer(player) {
+      if (!settings.autoNext || !player) return;
+      try {
+        const duration = Number(player.getDuration());
+        const currentTime = Number(player.getPosition());
+        if (!Number.isFinite(duration) || duration <= 0) return;
+        if (!Number.isFinite(currentTime) || currentTime < 0) return;
+        const remaining = duration - currentTime;
+        if (remaining <= 0.75) postEnded(null);
+      } catch {
+        // ignore
+      }
+    }
+
+    function maybeApplyJwSeek(player) {
+      if (seekApplied) return;
+      if (!player || !Number.isFinite(Number(embed.seekSeconds)) || Number(embed.seekSeconds) <= 0) return;
+      try {
+        const duration = Number(player.getDuration());
+        if (!Number.isFinite(duration) || duration <= 0) return;
+        player.seek(Math.min(Number(embed.seekSeconds), Math.max(0, duration - 1)));
+        seekApplied = true;
+      } catch {
+        // ignore
+      }
+    }
+
+    function forceJwAutoplay(player) {
+      if (!settings.forceAutoplay || !player) return;
+      try {
+        if (typeof player.setMute === 'function') player.setMute(false);
+        if (typeof player.setVolume === 'function') player.setVolume(100);
+        if (typeof player.play === 'function') player.play(true);
+      } catch {
+        // ignore
+      }
+    }
+
+    function attachJwPlayer(player) {
+      if (!player || player.__ateaishAutomationAttached) return;
+      player.__ateaishAutomationAttached = true;
+
+      const onReadyLike = () => {
+        forceJwAutoplay(player);
+        maybeApplyJwSeek(player);
+        scanAndClickSkipButtons();
+        postJwProgress(player);
+      };
+
+      try { player.on('ready', onReadyLike); } catch { }
+      try { player.on('playlistItem', onReadyLike); } catch { }
+      try { player.on('play', () => { forceJwAutoplay(player); postJwProgress(player); }); } catch { }
+      try { player.on('buffer', () => forceJwAutoplay(player)); } catch { }
+      try { player.on('firstFrame', () => { forceJwAutoplay(player); postJwProgress(player); }); } catch { }
+      try { player.on('time', () => { postJwProgress(player); maybePreEndJwPlayer(player); }); } catch { }
+      try { player.on('complete', () => postEnded(null)); } catch { }
+
+      onReadyLike();
+    }
+
+    function scanJwPlayers() {
+      if (typeof window.jwplayer !== 'function') return;
+      const seen = new Set();
+      const candidates = [];
+
+      try {
+        const primary = window.jwplayer();
+        if (primary) candidates.push(primary);
+      } catch { }
+
+      document.querySelectorAll('[id]').forEach((element) => {
+        const id = String(element.id || '').trim();
+        if (!id) return;
+        try {
+          const player = window.jwplayer(id);
+          if (player) candidates.push(player);
+        } catch { }
+      });
+
+      candidates.forEach((player) => {
+        if (!player || typeof player.getContainer !== 'function') return;
+        let key = null;
+        try {
+          const container = player.getContainer();
+          key = container || player.id || player;
+        } catch {
+          key = player;
+        }
+        if (seen.has(key)) return;
+        seen.add(key);
+        attachJwPlayer(player);
+      });
+    }
+
     function scanAndClickSkipButtons() {
       if (!settings.autoSkip) return;
       if (playerState.skipIntro) {
@@ -603,6 +819,7 @@
 
     function scanVideos() {
       document.querySelectorAll('video').forEach((video) => attachVideo(video));
+      scanJwPlayers();
     }
 
     window.addEventListener('message', (event) => {
