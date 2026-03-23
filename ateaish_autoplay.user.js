@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Videasy + Vidsrc Autoplay
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Automatically clicks the play button on Videasy and Vidsrc/Cloudnestra players, and auto-next on Vidsrc
 // @author       Ateaish
 // @match        https://atishramkhe.github.io/movies/*
@@ -14,13 +14,36 @@
 (function() {
     'use strict';
 
+    function isVisible(element) {
+        if (!element) return false;
+        const style = getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+    }
+
+    function findVideasyPlayButton() {
+        const buttons = document.querySelectorAll('button');
+
+        for (const button of buttons) {
+            if (button.disabled || !isVisible(button)) continue;
+
+            const playIconPath = button.querySelector('svg path');
+            if (!playIconPath || playIconPath.getAttribute('d') !== 'M8 5v14l11-7z') continue;
+
+            const wrapper = button.parentElement;
+            const nearbyText = wrapper && wrapper.querySelectorAll('p').length >= 2;
+            if (!nearbyText) continue;
+
+            return button;
+        }
+
+        return null;
+    }
+
     function clickVideasyPlayButton() {
-        const playDiv = document.querySelector('.title-year');
-        if (playDiv) {
-            const playBtn = playDiv.querySelector('button');
-            if (playBtn) {
-                playBtn.click();
-            }
+        const playBtn = findVideasyPlayButton();
+        if (playBtn && !playBtn.dataset.ateaishAutoplayClicked) {
+            playBtn.dataset.ateaishAutoplayClicked = 'true';
+            playBtn.click();
         }
     }
 
