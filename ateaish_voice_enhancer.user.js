@@ -9,6 +9,7 @@
 // @match        https://www.vidking.net/embed/*
 // @match        https://vidsrc-embed.ru/embed/*
 // @match        https://cloudnestra.com/*
+// @match        https://cinesrc.st/embed/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_voice_enhancer.user.js
 // @downloadURL  https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_voice_enhancer.user.js
@@ -367,6 +368,84 @@
         updateButtonState();
     }
 
+    function createToggleButtonCinesrc() {
+        const videoElement = document.querySelector('video');
+        if (!videoElement || document.getElementById('voice-boost-button')) return;
+
+        const anchorButton = document.querySelector(
+            'button[aria-label*="volume" i], button[aria-label*="mute" i], button[aria-label*="settings" i], button[aria-label*="fullscreen" i]'
+        );
+
+        boostButton = document.createElement('button');
+        boostButton.id = 'voice-boost-button';
+        boostButton.classList.add('cineby-scale');
+        boostButton.dataset.tooltip = 'Voice Boost';
+        boostButton.style.display = 'flex';
+        boostButton.style.flexDirection = 'column';
+        boostButton.style.alignItems = 'center';
+        boostButton.style.justifyContent = 'center';
+        boostButton.style.border = '2px solid white';
+        boostButton.style.borderRadius = '5px';
+        boostButton.style.padding = '2px 4px';
+        boostButton.style.fontFamily = 'sans-serif';
+        boostButton.style.fontSize = '10px';
+        boostButton.style.fontWeight = 'bold';
+        boostButton.style.lineHeight = '1';
+        boostButton.style.color = 'white';
+        boostButton.style.backgroundColor = 'transparent';
+        boostButton.style.cursor = 'pointer';
+        boostButton.style.zIndex = '99999';
+
+        const voiceSpan = document.createElement('span');
+        voiceSpan.textContent = 'VOICE';
+        voiceSpan.style.display = 'block';
+        voiceSpan.style.fontSize = '10px';
+        voiceSpan.style.lineHeight = '1';
+        voiceSpan.style.margin = '0';
+
+        const boostSpan = document.createElement('span');
+        boostSpan.textContent = 'BOOST';
+        boostSpan.style.display = 'block';
+        boostSpan.style.fontSize = '10px';
+        boostSpan.style.lineHeight = '1';
+        boostSpan.style.margin = '0';
+
+        boostButton._voiceSpan = voiceSpan;
+        boostButton._boostSpan = boostSpan;
+
+        boostButton.appendChild(voiceSpan);
+        boostButton.appendChild(boostSpan);
+
+        boostButton.addEventListener('click', () => {
+            const activeVideoElement = document.querySelector('video');
+            if (!activeVideoElement) return;
+
+            if (isEnhancementActive) {
+                disableAudioGraph(activeVideoElement);
+                localStorage.setItem('voiceBoostEnabled', 'false');
+            } else {
+                setupAudioGraph(activeVideoElement);
+                localStorage.setItem('voiceBoostEnabled', 'true');
+            }
+        });
+
+        if (anchorButton && anchorButton.parentElement) {
+            boostButton.style.marginLeft = '8px';
+            anchorButton.parentElement.insertBefore(boostButton, anchorButton.nextSibling);
+        } else {
+            const playerContainer = videoElement.parentElement || videoElement;
+            if (playerContainer instanceof HTMLElement && getComputedStyle(playerContainer).position === 'static') {
+                playerContainer.style.position = 'relative';
+            }
+            boostButton.style.position = 'absolute';
+            boostButton.style.right = '16px';
+            boostButton.style.bottom = '72px';
+            playerContainer.appendChild(boostButton);
+        }
+
+        updateButtonState();
+    }
+
     function updateBoostButtonVisibility() {
         const parentDiv = document.getElementById('oframeplayer_parent');
         if (!parentDiv || !boostButton) return;
@@ -399,6 +478,10 @@
                     createToggleButtonCloudnestra();
                 }
                 updateBoostButtonVisibility();
+            } else if (location.hostname === 'cinesrc.st') {
+                if (!document.getElementById('voice-boost-button')) {
+                    createToggleButtonCinesrc();
+                }
             } else {
                 // Default (Cineby/Videasy)
                 const playButton = document.getElementById('ButtonPlay');
