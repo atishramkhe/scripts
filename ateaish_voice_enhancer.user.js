@@ -372,9 +372,12 @@
         const videoElement = document.querySelector('video');
         if (!videoElement || document.getElementById('voice-boost-button')) return;
 
-        const anchorButton = document.querySelector(
-            'button[aria-label*="volume" i], button[aria-label*="mute" i], button[aria-label*="settings" i], button[aria-label*="fullscreen" i]'
-        );
+        const bottomControlBar = document.querySelector('media-controller .notflix-controlbar');
+        const volumeWrapper = bottomControlBar ? bottomControlBar.querySelector('.media-volume-wrapper') : null;
+        const fullscreenButton = bottomControlBar ? bottomControlBar.querySelector('media-fullscreen-button') : null;
+        const spacer = bottomControlBar
+            ? Array.from(bottomControlBar.children).find(node => node.classList && node.classList.contains('grow'))
+            : null;
 
         boostButton = document.createElement('button');
         boostButton.id = 'voice-boost-button';
@@ -395,6 +398,7 @@
         boostButton.style.backgroundColor = 'transparent';
         boostButton.style.cursor = 'pointer';
         boostButton.style.zIndex = '99999';
+        boostButton.style.pointerEvents = 'auto';
 
         const voiceSpan = document.createElement('span');
         voiceSpan.textContent = 'VOICE';
@@ -429,9 +433,18 @@
             }
         });
 
-        if (anchorButton && anchorButton.parentElement) {
+        if (bottomControlBar && volumeWrapper) {
+            boostButton.style.marginLeft = '10px';
+            if (spacer) {
+                bottomControlBar.insertBefore(boostButton, spacer);
+            } else if (fullscreenButton) {
+                bottomControlBar.insertBefore(boostButton, fullscreenButton);
+            } else {
+                bottomControlBar.insertBefore(boostButton, volumeWrapper.nextSibling);
+            }
+        } else if (fullscreenButton && fullscreenButton.parentElement) {
             boostButton.style.marginLeft = '8px';
-            anchorButton.parentElement.insertBefore(boostButton, anchorButton.nextSibling);
+            fullscreenButton.parentElement.insertBefore(boostButton, fullscreenButton);
         } else {
             const playerContainer = videoElement.parentElement || videoElement;
             if (playerContainer instanceof HTMLElement && getComputedStyle(playerContainer).position === 'static') {
