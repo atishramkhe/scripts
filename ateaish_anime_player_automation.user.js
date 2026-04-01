@@ -224,6 +224,7 @@
     return {
       type: PLAYER_INFO_TYPE,
       malId: source.malId != null && source.malId !== '' ? String(source.malId) : '',
+      token: source.token != null && source.token !== '' ? String(source.token) : '',
       aniListId: source.aniListId != null && source.aniListId !== '' ? String(source.aniListId) : '',
       episodeNumber: Number.isFinite(Number(source.episodeNumber)) && Number(source.episodeNumber) > 0
         ? Math.floor(Number(source.episodeNumber))
@@ -460,6 +461,7 @@
         if (!src || src === 'about:blank') return null;
         const parsed = new URL(src, window.location.href);
         const malId = String(parsed.searchParams.get('ateaish_mal') || '');
+        const token = String(parsed.searchParams.get('ateaish_token') || '');
         const episodeNumber = Number.isFinite(Number(parsed.searchParams.get('ateaish_ep')))
           ? Math.floor(Number(parsed.searchParams.get('ateaish_ep')))
           : null;
@@ -468,6 +470,7 @@
         return normalizePlayerInfo({
           ...base,
           malId: malId || base.malId,
+          token: token || base.token,
           episodeNumber: episodeNumber != null ? episodeNumber : base.episodeNumber,
           absoluteEpisodeNumber: episodeNumber != null ? episodeNumber : base.absoluteEpisodeNumber,
           skipIntro: skipSettings.skipIntro,
@@ -537,6 +540,45 @@
     let lastProgressAt = 0;
     let lastEndedAt = 0;
     let seekApplied = false;
+
+    function buildPlayerInfoMessage() {
+      return normalizePlayerInfo({
+        malId: playerState.malId,
+        token: playerState.token,
+        episodeNumber: playerState.episodeNumber,
+        absoluteEpisodeNumber: playerState.episodeNumber,
+        seasonNumber: playerState.seasonNumber,
+        skipIntro: playerState.skipIntro,
+        skipOutro: playerState.skipOutro,
+      });
+    }
+
+    function relayPlayerInfoToChildFrames() {
+      const info = buildPlayerInfoMessage();
+      if (!info.malId && !info.token && info.episodeNumber == null) return;
+
+      document.querySelectorAll('iframe').forEach((iframe) => {
+        if (!iframe || iframe.__ateaishPlayerInfoRelayBound) return;
+        iframe.__ateaishPlayerInfoRelayBound = true;
+        iframe.addEventListener('load', () => {
+          try {
+            if (iframe.contentWindow) iframe.contentWindow.postMessage(buildPlayerInfoMessage(), '*');
+          } catch {
+            // ignore
+          }
+        }, { passive: true });
+      });
+
+      document.querySelectorAll('iframe').forEach((iframe) => {
+        try {
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(info, '*');
+          }
+        } catch {
+          // ignore
+        }
+      });
+    }
 
     function getCurrentStatePayload() {
       return {
@@ -822,10 +864,15 @@
           const testId = String(element.getAttribute('data-testid') || '').toLowerCase();
           return attr === 'intro'
             || dataName.includes('skip-intro')
+            || dataName.includes('skip-opening')
             || testId.includes('skip-intro')
             || text.includes('skip intro')
             || text.includes('skip opening')
             || text.includes('skip op')
+            || text.includes('passer intro')
+            || text.includes("passer l'intro")
+            || text.includes('passer opening')
+            || text.includes('passer op')
             || text.includes('intro') && text.includes('skip');
         });
       }
@@ -838,11 +885,17 @@
           return attr === 'outro'
             || dataName.includes('skip-outro')
             || dataName.includes('skip-ending')
+            || dataName.includes('skip-credits')
             || testId.includes('skip-outro')
             || testId.includes('skip-ending')
             || text.includes('skip outro')
             || text.includes('skip ending')
+            || text.includes('skip credits')
             || text.includes('skip ed')
+            || text.includes('passer outro')
+            || text.includes("passer l'outro")
+            || text.includes('passer ending')
+            || text.includes('passer generique')
             || text.includes('outro') && text.includes('skip')
             || text.includes('ending') && text.includes('skip');
         });
@@ -895,10 +948,12 @@
       if (message.type === PLAYER_INFO_TYPE) {
         const normalized = normalizePlayerInfo(message);
         if (normalized.malId) playerState.malId = normalized.malId;
+        if (normalized.token) playerState.token = normalized.token;
         if (normalized.episodeNumber != null) playerState.episodeNumber = normalized.episodeNumber;
         if (normalized.seasonNumber != null) playerState.seasonNumber = normalized.seasonNumber;
         playerState.skipIntro = normalized.skipIntro;
         playerState.skipOutro = normalized.skipOutro;
+        relayPlayerInfoToChildFrames();
         return;
       }
 
@@ -911,10 +966,12 @@
     onReady(() => {
       scanVideos();
       scanAndClickSkipButtons();
+      relayPlayerInfoToChildFrames();
 
       const observer = new MutationObserver(() => {
         scanVideos();
         scanAndClickSkipButtons();
+        relayPlayerInfoToChildFrames();
       });
 
       observer.observe(document.documentElement, { childList: true, subtree: true });
@@ -922,6 +979,7 @@
       setInterval(() => {
         scanVideos();
         scanAndClickSkipButtons();
+        relayPlayerInfoToChildFrames();
       }, 800);
     });
   }
