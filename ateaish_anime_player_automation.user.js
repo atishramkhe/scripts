@@ -65,9 +65,75 @@
   const ANIME_SKIP_SETTINGS_PREFIX = 'animeSkipSettings_';
   const HOSTNAME = String(location.hostname || '').toLowerCase();
 
+  function readStorageFallback(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  function writeStorageFallback(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function gmGetValueOrFallback(key, fallbackValue) {
+    try {
+      if (typeof GM_getValue === 'function') {
+        return GM_getValue(key, fallbackValue);
+      }
+    } catch {
+      // ignore
+    }
+
+    const fallback = readStorageFallback(key);
+    return fallback == null ? fallbackValue : fallback;
+  }
+
+  function gmSetValueOrFallback(key, value) {
+    try {
+      if (typeof GM_setValue === 'function') {
+        GM_setValue(key, value);
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+
+    return writeStorageFallback(key, value);
+  }
+
+  function registerMenuCommandSafe(label, handler) {
+    try {
+      if (typeof GM_registerMenuCommand === 'function') {
+        GM_registerMenuCommand(label, handler);
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const gmNamespace = typeof GM === 'object' && GM ? GM : null;
+      if (gmNamespace && typeof gmNamespace.registerMenuCommand === 'function') {
+        gmNamespace.registerMenuCommand(label, handler);
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+
+    return false;
+  }
+
   function loadSettings() {
     try {
-      const saved = GM_getValue(SETTINGS_KEY, null);
+      const saved = gmGetValueOrFallback(SETTINGS_KEY, null);
       if (!saved) return { ...DEFAULTS };
       const parsed = typeof saved === 'string' ? JSON.parse(saved) : saved;
       return { ...DEFAULTS, ...(parsed || {}) };
@@ -78,7 +144,7 @@
 
   function saveSettings(next) {
     try {
-      GM_setValue(SETTINGS_KEY, JSON.stringify(next));
+      gmSetValueOrFallback(SETTINGS_KEY, JSON.stringify(next));
     } catch {
       // ignore
     }
@@ -96,12 +162,12 @@
     saveSettings(next);
   }
 
-  GM_registerMenuCommand(`Enabled: ${settings.enabled ? 'ON' : 'OFF'}`, () => toggleSetting('enabled'));
-  GM_registerMenuCommand(`Force autoplay: ${settings.forceAutoplay ? 'ON' : 'OFF'}`, () => toggleSetting('forceAutoplay'));
-  GM_registerMenuCommand(`Auto skip buttons: ${settings.autoSkip ? 'ON' : 'OFF'}`, () => toggleSetting('autoSkip'));
-  GM_registerMenuCommand(`Report progress: ${settings.reportProgress ? 'ON' : 'OFF'}`, () => toggleSetting('reportProgress'));
-  GM_registerMenuCommand(`Auto next: ${settings.autoNext ? 'ON' : 'OFF'}`, () => toggleSetting('autoNext'));
-  GM_registerMenuCommand(`Debug logs: ${settings.debug ? 'ON' : 'OFF'}`, () => toggleSetting('debug'));
+  registerMenuCommandSafe(`Enabled: ${settings.enabled ? 'ON' : 'OFF'}`, () => toggleSetting('enabled'));
+  registerMenuCommandSafe(`Force autoplay: ${settings.forceAutoplay ? 'ON' : 'OFF'}`, () => toggleSetting('forceAutoplay'));
+  registerMenuCommandSafe(`Auto skip buttons: ${settings.autoSkip ? 'ON' : 'OFF'}`, () => toggleSetting('autoSkip'));
+  registerMenuCommandSafe(`Report progress: ${settings.reportProgress ? 'ON' : 'OFF'}`, () => toggleSetting('reportProgress'));
+  registerMenuCommandSafe(`Auto next: ${settings.autoNext ? 'ON' : 'OFF'}`, () => toggleSetting('autoNext'));
+  registerMenuCommandSafe(`Debug logs: ${settings.debug ? 'ON' : 'OFF'}`, () => toggleSetting('debug'));
 
   if (!settings.enabled) return;
 
