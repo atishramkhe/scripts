@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Videasy + Vidsrc Autoplay
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Automatically clicks play on supported movie hosts, reports progress for vidsrc.online, and advances to the next episode for TV playback
 // @author       Ateaish
 // @match        https://atishramkhe.github.io/movies/*
@@ -21,6 +21,8 @@
     const MESSAGE_SOURCE = 'ateaish-autoplay';
     const ENDED_MESSAGE_TYPE = 'ateaish_movies_source_ended';
     const PROGRESS_INTERVAL_MS = 1500;
+    const AUTOPLAY_RETRY_MS = 1200;
+    let lastAutoplayAttemptAt = 0;
 
     function isVisible(element) {
         if (!element) return false;
@@ -113,6 +115,61 @@
             const clickable = playIcon.closest('button, a, div') || playIcon;
             triggerElementClick(clickable);
         }
+    }
+
+    function isAnyVideoPlaying() {
+        return Array.from(document.querySelectorAll('video')).some((video) => {
+            try {
+                return !video.paused && !video.ended && Number(video.readyState) >= 2;
+            } catch {
+                return false;
+            }
+        });
+    }
+
+    function isAnyJwPlayerPlaying() {
+        if (typeof window.jwplayer !== 'function') return false;
+        const candidates = [];
+
+        try {
+            const primary = window.jwplayer();
+            if (primary) candidates.push(primary);
+        } catch {
+            // ignore
+        }
+
+        document.querySelectorAll('[id]').forEach((element) => {
+            const id = String(element.id || '').trim();
+            if (!id) return;
+            try {
+                const player = window.jwplayer(id);
+                if (player) candidates.push(player);
+            } catch {
+                // ignore
+            }
+        });
+
+        return candidates.some((player) => {
+            try {
+                return String(player.getState ? player.getState() : '').toLowerCase() === 'playing';
+            } catch {
+                return false;
+            }
+        });
+    }
+
+    function hasActivePlayback() {
+        return isAnyVideoPlaying() || isAnyJwPlayerPlaying();
+    }
+
+    function ensureVidsrcPlaybackStarted() {
+        if (hasActivePlayback()) return;
+
+        const now = Date.now();
+        if ((now - lastAutoplayAttemptAt) < AUTOPLAY_RETRY_MS) return;
+        lastAutoplayAttemptAt = now;
+
+        clickVidsrcPlayButton();
     }
 
     function clickVidsrcNextIfPresent() {
@@ -410,7 +467,11 @@
 
     function runAllClickers() {
         clickVideasyPlayButton();
-        clickVidsrcPlayButton();
+        if (hostName === VIDSRC_ONLINE_HOST) {
+            ensureVidsrcPlaybackStarted();
+        } else {
+            clickVidsrcPlayButton();
+        }
 
         if (hostName === MOVIES_HOST) {
             setupMoviesPageAutoNextHandler();
@@ -430,4 +491,5 @@
     // Observe DOM for dynamically loaded buttons
     const observer = new MutationObserver(runAllClickers);
     observer.observe(document.documentElement, { childList: true, subtree: true });
+    setInterval(runAllClickers, AUTOPLAY_RETRY_MS);
 })();
