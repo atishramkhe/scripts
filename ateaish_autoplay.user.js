@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Videasy + Vidsrc Autoplay
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Automatically clicks play on supported movie hosts, reports progress for vidsrc.online, and advances to the next episode for TV playback
 // @author       Ateaish
 // @match        https://atishramkhe.github.io/movies/*
@@ -25,7 +25,36 @@
     function isVisible(element) {
         if (!element) return false;
         const style = getComputedStyle(element);
-        return style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (element.offsetParent !== null) return true;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }
+
+    function triggerElementClick(element) {
+        if (!element) return false;
+
+        try {
+            element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: window }));
+        } catch {
+            // ignore
+        }
+        try {
+            element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        } catch {
+            // ignore
+        }
+        try {
+            element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        } catch {
+            // ignore
+        }
+        try {
+            element.click();
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     function findVideasyPlayButton() {
@@ -51,23 +80,38 @@
         const playBtn = findVideasyPlayButton();
         if (playBtn && !playBtn.dataset.ateaishAutoplayClicked) {
             playBtn.dataset.ateaishAutoplayClicked = 'true';
-            playBtn.click();
+            triggerElementClick(playBtn);
         }
     }
 
     function clickVidsrcPlayButton() {
-        const button = document.querySelector('#btn-play, button#btn-play, [data-jwplayer-id="btn-play"]');
-        if (button && isVisible(button) && !button.dataset.ateaishAutoplayClicked) {
+        const selectors = [
+            '#btn-play',
+            'button#btn-play',
+            '[data-jwplayer-id="btn-play"]',
+            '.btn-play',
+            '.jw-icon-playback',
+            '.jw-display-icon-container',
+            '.jw-icon-display',
+            'button[aria-label="Play"]',
+            '[class*="play"][class*="btn"]'
+        ];
+
+        for (const selector of selectors) {
+            const button = document.querySelector(selector);
+            if (!button || button.dataset.ateaishAutoplayClicked) continue;
+            if (!isVisible(button) && selector !== '#btn-play' && selector !== 'button#btn-play' && selector !== '[data-jwplayer-id="btn-play"]') continue;
+
             button.dataset.ateaishAutoplayClicked = 'true';
-            button.click();
-            return;
+            const target = button.closest('button, a, div') || button;
+            if (triggerElementClick(target)) return;
         }
 
         const playIcon = document.querySelector('#pl_but');
         if (playIcon && !playIcon.dataset.ateaishAutoplayClicked) {
             playIcon.dataset.ateaishAutoplayClicked = 'true';
             const clickable = playIcon.closest('button, a, div') || playIcon;
-            clickable.click();
+            triggerElementClick(clickable);
         }
     }
 
@@ -121,8 +165,12 @@
         const context = parseSourceContextFromUrl();
         if (!context || !video) return null;
 
-        const duration = Number(video.duration);
-        const currentTime = Number(video.currentTime);
+        return buildProgressPayloadFromTimes(Number(video.currentTime), Number(video.duration), overrides);
+    }
+
+    function buildProgressPayloadFromTimes(currentTime, duration, overrides = {}) {
+        const context = parseSourceContextFromUrl();
+        if (!context) return null;
         if (!Number.isFinite(currentTime) || currentTime < 0) return null;
 
         let progress = null;
@@ -202,6 +250,132 @@
         observer.observe(document.documentElement, { childList: true, subtree: true });
     }
 
+    function setupVidsrcOnlineJwHandler() {
+        if (window.__ateaishVidsrcOnlineJwHooked) return;
+        window.__ateaishVidsrcOnlineJwHooked = true;
+
+        let lastProgressAt = 0;
+        let lastEndedAt = 0;
+
+        const postJwProgress = (player) => {
+            if (!player) return;
+            const now = Date.now();
+            if (now - lastProgressAt < PROGRESS_INTERVAL_MS) return;
+            lastProgressAt = now;
+
+            try {
+                const payload = buildProgressPayloadFromTimes(Number(player.getPosition()), Number(player.getDuration()));
+                if (payload) postToTop(payload);
+            } catch {
+                // ignore
+            }
+        };
+
+        const postJwEnded = (player) => {
+            const now = Date.now();
+            if (now - lastEndedAt < 3000) return;
+            lastEndedAt = now;
+
+            try {
+                const payload = buildProgressPayloadFromTimes(Number(player?.getPosition?.()), Number(player?.getDuration?.()), { progress: 100 });
+                if (payload) postToTop(payload);
+            } catch {
+                // ignore
+            }
+
+            postToTop({ type: ENDED_MESSAGE_TYPE });
+        };
+
+        const forceJwAutoplay = (player) => {
+            if (!player) return;
+            try {
+                if (typeof player.setMute === 'function') player.setMute(false);
+                if (typeof player.setVolume === 'function') player.setVolume(100);
+                if (typeof player.play === 'function') player.play(true);
+            } catch {
+                // ignore
+            }
+        };
+
+        const maybePreEndJwPlayer = (player) => {
+            if (!player) return;
+            try {
+                const duration = Number(player.getDuration());
+                const currentTime = Number(player.getPosition());
+                if (!Number.isFinite(duration) || duration <= 0) return;
+                if (!Number.isFinite(currentTime) || currentTime < 0) return;
+                if ((duration - currentTime) <= 0.75) {
+                    postJwEnded(player);
+                }
+            } catch {
+                // ignore
+            }
+        };
+
+        const attachJwPlayer = (player) => {
+            if (!player || player.__ateaishAutoplayJwBound) return;
+            player.__ateaishAutoplayJwBound = true;
+
+            const onReadyLike = () => {
+                forceJwAutoplay(player);
+                clickVidsrcPlayButton();
+                postJwProgress(player);
+            };
+
+            try { player.on('ready', onReadyLike); } catch { }
+            try { player.on('playlistItem', onReadyLike); } catch { }
+            try { player.on('play', () => { forceJwAutoplay(player); postJwProgress(player); }); } catch { }
+            try { player.on('buffer', () => forceJwAutoplay(player)); } catch { }
+            try { player.on('firstFrame', () => { forceJwAutoplay(player); postJwProgress(player); }); } catch { }
+            try { player.on('time', () => { postJwProgress(player); maybePreEndJwPlayer(player); }); } catch { }
+            try { player.on('complete', () => postJwEnded(player)); } catch { }
+
+            onReadyLike();
+        };
+
+        const scanJwPlayers = () => {
+            if (typeof window.jwplayer !== 'function') return;
+            const seen = new Set();
+            const candidates = [];
+
+            try {
+                const primary = window.jwplayer();
+                if (primary) candidates.push(primary);
+            } catch {
+                // ignore
+            }
+
+            document.querySelectorAll('[id]').forEach((element) => {
+                const id = String(element.id || '').trim();
+                if (!id) return;
+                try {
+                    const player = window.jwplayer(id);
+                    if (player) candidates.push(player);
+                } catch {
+                    // ignore
+                }
+            });
+
+            candidates.forEach((player) => {
+                if (!player || typeof player.getContainer !== 'function') return;
+                let key = null;
+                try {
+                    key = player.getContainer() || player.id || player;
+                } catch {
+                    key = player;
+                }
+                if (seen.has(key)) return;
+                seen.add(key);
+                attachJwPlayer(player);
+            });
+        };
+
+        scanJwPlayers();
+        const observer = new MutationObserver(scanJwPlayers);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        setInterval(scanJwPlayers, 2000);
+    }
+
     function setupMoviesPageAutoNextHandler() {
         if (window.__ateaishMoviesAutoNextHooked) return;
         window.__ateaishMoviesAutoNextHooked = true;
@@ -244,6 +418,7 @@
 
         if (hostName === VIDSRC_ONLINE_HOST) {
             setupVidsrcOnlineProgressHandler();
+            setupVidsrcOnlineJwHandler();
         } else {
             setupVidsrcEndHandler();
         }
@@ -254,5 +429,5 @@
 
     // Observe DOM for dynamically loaded buttons
     const observer = new MutationObserver(runAllClickers);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
