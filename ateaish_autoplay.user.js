@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Videasy + Vidsrc Autoplay
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  Automatically clicks play on supported movie hosts, reports progress for vidsrc.online, and advances to the next episode for TV playback
 // @author       Ateaish
 // @match        https://atishramkhe.github.io/movies/*
@@ -101,17 +101,15 @@
 
         for (const selector of selectors) {
             const button = document.querySelector(selector);
-            if (!button || button.dataset.ateaishAutoplayClicked) continue;
+            if (!button) continue;
             if (!isVisible(button) && selector !== '#btn-play' && selector !== 'button#btn-play' && selector !== '[data-jwplayer-id="btn-play"]') continue;
 
-            button.dataset.ateaishAutoplayClicked = 'true';
             const target = button.closest('button, a, div') || button;
             if (triggerElementClick(target)) return;
         }
 
         const playIcon = document.querySelector('#pl_but');
-        if (playIcon && !playIcon.dataset.ateaishAutoplayClicked) {
-            playIcon.dataset.ateaishAutoplayClicked = 'true';
+        if (playIcon) {
             const clickable = playIcon.closest('button, a, div') || playIcon;
             triggerElementClick(clickable);
         }
