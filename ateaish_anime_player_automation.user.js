@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ateaish Anime — vidsrc Automation
 // @namespace    https://atishramkhe.github.io/
-// @version      2.2.0
+// @version      2.4.0
 // @description  Autoplay, auto-next, and auto-skip intro/outro for vidsrc.cc anime embeds.
 // @author       you
 // @run-at       document-start
@@ -23,88 +23,8 @@
   if (window.__ateaishVidsrcAutomation) return;
   window.__ateaishVidsrcAutomation = true;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // On-screen debug terminal
-  //
-  // Runs in TWO contexts:
-  //  • Inside vidsrc.cc iframe  → posts log lines to window.top via postMessage
-  //  • On the parent anime page → listens for those messages and renders the box
-  //    (injected by bootParentTerminal below, called from the parent-page branch)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const DBG_MSG = '__ateaish_dbg_line';
-
   function dbg(...args) {
-    const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-    console.log('[ateaish]', msg);
-    // Post to parent so the terminal rendered on the anime page picks it up
-    try { window.top.postMessage({ type: DBG_MSG, msg, ts: new Date().toISOString().slice(11, 23) }, '*'); } catch { }
-  }
-
-  // ── Parent-page terminal (only bootstrapped when running on the anime page) ──
-  function bootParentTerminal() {
-    let box = null;
-    let lines = [];
-    const MAX = 120;
-
-    function ensureBox() {
-      if (box && document.body && document.body.contains(box)) return box;
-      box = document.createElement('div');
-      box.id = '__ateaish_dbg_parent';
-      Object.assign(box.style, {
-        position: 'fixed', bottom: '0', right: '0', width: '480px',
-        maxHeight: '40vh', overflowY: 'auto',
-        background: 'rgba(0,0,0,0.92)', color: '#0f0',
-        fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.5',
-        padding: '4px 6px', zIndex: '2147483647',
-        pointerEvents: 'auto', userSelect: 'text',
-        borderTop: '2px solid #0f0', borderLeft: '2px solid #0f0',
-      });
-
-      const toolbar = document.createElement('div');
-      Object.assign(toolbar.style, { display: 'flex', gap: '6px', marginBottom: '3px', position: 'sticky', top: '0', background: 'rgba(0,0,0,0.95)', padding: '2px 0' });
-
-      const copyBtn = document.createElement('button');
-      copyBtn.textContent = '⎘ copy all';
-      Object.assign(copyBtn.style, { background: '#111', color: '#0f0', border: '1px solid #0f0', fontSize: '10px', cursor: 'pointer', padding: '1px 6px' });
-      copyBtn.addEventListener('click', () => {
-        try { navigator.clipboard.writeText(lines.map(l => `${l.ts} ${l.msg}`).join('\n')); } catch { }
-      });
-
-      const clearBtn = document.createElement('button');
-      clearBtn.textContent = '✕ clear';
-      Object.assign(clearBtn.style, { background: '#111', color: '#f80', border: '1px solid #f80', fontSize: '10px', cursor: 'pointer', padding: '1px 6px' });
-      clearBtn.addEventListener('click', () => { lines = []; Array.from(box.querySelectorAll('.dbg-line')).forEach(el => el.remove()); });
-
-      const closeBtn = document.createElement('button');
-      closeBtn.textContent = '✕ close';
-      Object.assign(closeBtn.style, { background: '#111', color: '#f44', border: '1px solid #f44', fontSize: '10px', cursor: 'pointer', padding: '1px 6px', marginLeft: 'auto' });
-      closeBtn.addEventListener('click', () => box.remove());
-
-      toolbar.appendChild(copyBtn);
-      toolbar.appendChild(clearBtn);
-      toolbar.appendChild(closeBtn);
-      box.appendChild(toolbar);
-      document.body.appendChild(box);
-      return box;
-    }
-
-    window.addEventListener('message', (event) => {
-      const msg = event && event.data;
-      if (!msg || msg.type !== DBG_MSG) return;
-      lines.push({ ts: msg.ts, msg: msg.msg });
-      if (lines.length > MAX) lines.shift();
-      const b = ensureBox();
-      const color = msg.msg.includes('CLICKING') || msg.msg.includes('ended') ? '#ff0' :
-                    msg.msg.includes('suppressed') ? '#f80' : '#0f0';
-      const line = document.createElement('div');
-      line.className = 'dbg-line';
-      line.textContent = `${msg.ts} ${msg.msg}`;
-      line.style.color = color;
-      line.style.borderBottom = '1px solid #111';
-      b.appendChild(line);
-      b.scrollTop = b.scrollHeight;
-    }, false);
+    console.log('[ateaish]', ...args);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -212,6 +132,8 @@
 
   function forcePlay(video) {
     if (!video || !video.paused) return;
+    // Never override an intentional user pause — only autoplay on initial load (currentTime ≈ 0)
+    if (video.__ateaishUserPaused) return;
     try { video.muted = false; if (video.volume <= 0) video.volume = 1; } catch { }
     const p = video.play();
     if (p && typeof p.catch === 'function') {
@@ -391,10 +313,16 @@
     video.addEventListener('canplay',        () => forcePlay(video), { passive: true });
     video.addEventListener('play',           () => { enforceUnmute(video); reportProgress(video); }, { passive: true });
     video.addEventListener('playing',        () => { enforceUnmute(video); reportProgress(video); }, { passive: true });
-    video.addEventListener('pause',          () => reportProgress(video, true), { passive: true });
+    video.addEventListener('pause',          () => { 
+      // Mark user-paused only after playback has genuinely started
+      if (video.currentTime > 0.5 && !video.ended) video.__ateaishUserPaused = true;
+      reportProgress(video, true);
+    }, { passive: true });
+    video.addEventListener('play',            () => { video.__ateaishUserPaused = false; }, { passive: true });
+    video.addEventListener('seeking',         () => { video.__ateaishUserPaused = false; }, { passive: true });
     video.addEventListener('timeupdate',     () => { reportProgress(video); checkNearEnd(video); }, { passive: true });
     video.addEventListener('durationchange', () => reportProgress(video), { passive: true });
-    video.addEventListener('ended',          () => { reportProgress(video, true); reportEnded(); }, { passive: true });
+    video.addEventListener('ended',          () => { video.__ateaishUserPaused = false; reportProgress(video, true); reportEnded(); }, { passive: true });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -433,7 +361,7 @@
     // is inside that cross-origin frame and we cannot reach it from here.
     const v = document.querySelector('video');
     if (v) {
-      if (v.paused && !v.ended) forcePlay(v);
+      if (v.paused && !v.ended && !v.__ateaishUserPaused) forcePlay(v);
       enforceUnmute(v);
     } else if (!document.querySelector('iframe')) {
       tryClickPlayButton();
@@ -488,12 +416,7 @@
   const isTopFrame = window.top === window;
 
   if (isTopFrame) {
-    // Running on the parent anime page — only listen for debug log messages.
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', bootParentTerminal, { once: true });
-    } else {
-      bootParentTerminal();
-    }
+    // Top frame (anime page) — automation runs only inside iframes.
   } else {
     // Running inside any iframe (outer vidsrc.cc embed OR inner player).
     if (document.readyState === 'loading') {
