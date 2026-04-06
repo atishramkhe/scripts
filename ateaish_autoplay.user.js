@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Videasy + Vidsrc Autoplay
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  Automatically clicks play on supported movie hosts, reports progress for vidsrc.online, and advances to the next episode for TV playback
 // @author       Ateaish
 // @match        https://atishramkhe.github.io/movies/*
@@ -17,12 +17,39 @@
 
     const hostName = location.hostname.replace(/^www\./, '');
     const MOVIES_HOST = 'atishramkhe.github.io';
+    const VIDEASY_HOST = 'player.videasy.net';
     const VIDSRC_ONLINE_HOST = 'vidsrc.online';
+    const VIDSRC_EMBED_HOST = 'vidsrc-embed.ru';
+    const CLOUDNESTRA_HOST = 'cloudnestra.com';
     const MESSAGE_SOURCE = 'ateaish-autoplay';
     const ENDED_MESSAGE_TYPE = 'ateaish_movies_source_ended';
     const PROGRESS_INTERVAL_MS = 1500;
     const AUTOPLAY_RETRY_MS = 1200;
     let lastAutoplayAttemptAt = 0;
+
+    function isMoviesPage() {
+        return hostName === MOVIES_HOST && location.pathname.startsWith('/movies/');
+    }
+
+    function isVideasyPage() {
+        return hostName === VIDEASY_HOST;
+    }
+
+    function isVidsrcOnlinePage() {
+        return hostName === VIDSRC_ONLINE_HOST;
+    }
+
+    function isVidsrcEmbedPage() {
+        return hostName === VIDSRC_EMBED_HOST;
+    }
+
+    function isCloudnestraPage() {
+        return hostName === CLOUDNESTRA_HOST;
+    }
+
+    function isGenericPlayerHost() {
+        return isVidsrcEmbedPage() || isCloudnestraPage();
+    }
 
     function isVisible(element) {
         if (!element) return false;
@@ -464,21 +491,25 @@
     }
 
     function runAllClickers() {
-        clickVideasyPlayButton();
-        if (hostName === VIDSRC_ONLINE_HOST) {
-            ensureVidsrcPlaybackStarted();
-        } else {
-            clickVidsrcPlayButton();
-        }
-
-        if (hostName === MOVIES_HOST) {
+        if (isMoviesPage()) {
             setupMoviesPageAutoNextHandler();
+            return;
         }
 
-        if (hostName === VIDSRC_ONLINE_HOST) {
+        if (isVideasyPage()) {
+            clickVideasyPlayButton();
+            return;
+        }
+
+        if (isVidsrcOnlinePage()) {
+            ensureVidsrcPlaybackStarted();
             setupVidsrcOnlineProgressHandler();
             setupVidsrcOnlineJwHandler();
-        } else {
+            return;
+        }
+
+        if (isGenericPlayerHost()) {
+            clickVidsrcPlayButton();
             setupVidsrcEndHandler();
         }
     }
