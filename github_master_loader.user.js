@@ -32,8 +32,7 @@
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cdn_autoplay.user.js', 
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/cdn_adblock.user.js', 
         'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_drama_helpers.user.js', 
-        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_anime_player_automation.user.js', 
-        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_autoplay.user.js'
+        'https://raw.githubusercontent.com/atishramkhe/scripts/refs/heads/main/ateaish_anime_player_automation.user.js'
 
         // Add more script URLs here as needed
     ];
